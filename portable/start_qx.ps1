@@ -64,8 +64,20 @@ try {
     if (Test-Path -LiteralPath $python) {
         $modulePathRepaired = Repair-QXModulePath
     }
-    $needsSetup = !(Test-Path -LiteralPath $ready) -or !(Test-Path -LiteralPath $python)
-    if ((Test-Path -LiteralPath $python) -and ($needsSetup -or $modulePathRepaired)) {
+    # A legacy ready marker does not prove that newly required EIS libraries exist.
+    # Check imports on EVERY launch, without contacting EIS or starting AI.
+    $eisDependenciesReady = $false
+    if (Test-Path -LiteralPath $python) {
+        Write-Host '[QX] Checking EIS dependencies in the existing private runtime ...'
+        & $python (Join-Path $root 'qx_entry.py') --eis-selfcheck
+        $eisDependenciesReady = ($LASTEXITCODE -eq 0)
+        if (!$eisDependenciesReady) {
+            Write-Host '[QX] EIS libraries need repair; user databases and AI will be preserved.'
+            if (Test-Path -LiteralPath $ready) { Remove-Item -Force $ready }
+        }
+    }
+    $needsSetup = !(Test-Path -LiteralPath $ready) -or !(Test-Path -LiteralPath $python) -or !$eisDependenciesReady
+    if ((Test-Path -LiteralPath $python) -and $eisDependenciesReady -and ($needsSetup -or $modulePathRepaired)) {
         Write-Host '[QX] Checking the existing runtime before downloading libraries ...'
         & $python (Join-Path $root 'qx_entry.py') --selfcheck
         if ($LASTEXITCODE -eq 0) {

@@ -1,5 +1,5 @@
 // @ts-nocheck
-/* QX Modern 4.0.39 — Purchase intake and workspace dashboard. */
+/* QX Modern 4.0.40 — Immediate drafts and background source retrieval. */
 const $ = (s) => document.querySelector(s);
 const fmt = (v, dec = 0) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: dec, minimumFractionDigits: dec }).format(Number(v) || 0);
 const rub = (v) => `${fmt(v, 0)} ₽`;
@@ -20,8 +20,8 @@ let uiTimer;
 const reqLabels = { title: 'Название позиции', item_name: 'Наименование товара', ktru_code: 'Код КТРУ', quantity: 'Количество', nmck: 'НМЦК, ₽', platform: 'Платформа', product_type: 'Тип изделия', equipment_profile_name: 'База производителя', cpu_model: 'Модель процессора', cpu_cores_min: 'Ядер CPU, не менее', cpu_threads_min: 'Потоков CPU, не менее', cpu_freq_ghz_min: 'Базовая частота, ГГц', cpu_freq_max_ghz_min: 'Максимальная частота, ГГц', cpu_l3_mb_min: 'Кэш L3, МБ', cpu_tdp_w_max: 'TDP CPU, не более', cpu_passmark_min: 'PassMark, не менее', need_integrated_graphics: 'Встроенная графика', ram_gb_min: 'Оперативная память, ГБ', ram_type: 'Тип памяти', ram_mhz_min: 'Частота RAM, МГц', ram_max_supported_gb_min: 'Максимальная RAM, ГБ', ram_slots_min: 'Слотов памяти, не менее', ssd_gb_min: 'SSD, ГБ', ssd_interface: 'Интерфейс SSD', hdd_gb_min: 'HDD, ГБ', need_gpu: 'Дискретная видеокарта', gpu_vram_gb_min: 'Видеопамять, ГБ', psu_w_min: 'Мощность БП, Вт', need_wifi: 'Wi-Fi', need_bluetooth: 'Bluetooth', forbid_wireless: 'Запрет беспроводной связи', need_cardreader: 'Картридер', need_keyboard: 'Клавиатура', need_mouse: 'Мышь', need_os: 'Операционная система', os_text: 'Название ОС', m2_key_m_min: 'M.2 Key M, не менее', m2_key_e_min: 'M.2 Key E, не менее', ethernet_mbps_min: 'Ethernet, Мбит/с', ethernet_ports_min: 'Портов RJ-45', usb2_total_min: 'USB 2.0, всего', usb3_gen1_total_min: 'USB 3.2 Gen1, всего', usb3_gen2_total_min: 'USB 3.2 Gen2, всего', usb_c_total_min: 'USB Type-C, всего', case_height_max_mm: 'Высота корпуса до, мм', case_length_max_mm: 'Длина корпуса до, мм', case_width_max_mm: 'Ширина корпуса до, мм', bay_525_min: 'Отсеков 5,25″', bay_25_min: 'Отсеков 2,5″', bay_35_min: 'Отсеков 3,5″', system_case_mode: 'Режим выбора корпуса', warranty_months_min: 'Гарантия, месяцев', monitor_diagonal_in_min: 'Экран от, дюйм', monitor_refresh_hz_min: 'Частота экрана, Гц', monitor_inches: 'Диагональ экрана, дюйм', monitor_resolution: 'Разрешение экрана', monitor_matrix: 'Матрица экрана', monitor_brightness_min: 'Яркость экрана, кд/м²', monitor_hdmi_ports_min: 'HDMI монитора, портов', monitor_dp_ports_min: 'DisplayPort монитора, портов', aio_platform_mode: 'Режим моноблочной платформы', custom_aio_name: 'Платформа из базы', custom_case_name: 'Корпус из базы', keyboard_source_mode: 'Источник клавиатуры', mouse_source_mode: 'Источник мыши', keyboard_catalog_item: 'Клавиатура из моей базы', mouse_catalog_item: 'Мышь из моей базы', monitor_catalog_item: 'Монитор из моей базы' };
 const legacyKeyGroups = [['Основное', ['title', 'item_name', 'quantity', 'nmck', 'product_type', 'platform', 'equipment_profile_name', 'ktru_code']], ['Процессор', ['cpu_model', 'cpu_cores_min', 'cpu_threads_min', 'cpu_freq_ghz_min', 'cpu_freq_max_ghz_min', 'cpu_l3_mb_min', 'cpu_tdp_w_max', 'cpu_passmark_min', 'need_integrated_graphics']], ['Память и накопители', ['ram_gb_min', 'ram_type', 'ram_mhz_min', 'ram_max_supported_gb_min', 'ram_slots_min', 'ssd_gb_min', 'ssd_interface', 'hdd_gb_min']], ['Видеокарта и периферия', ['need_gpu', 'gpu_vram_gb_min', 'need_wifi', 'need_bluetooth', 'forbid_wireless', 'need_cardreader', 'need_keyboard', 'need_mouse', 'need_os', 'os_text']], ['Корпус и интерфейсы', ['psu_w_min', 'm2_key_m_min', 'm2_key_e_min', 'ethernet_mbps_min', 'ethernet_ports_min', 'usb2_total_min', 'usb3_gen1_total_min', 'usb3_gen2_total_min', 'usb_c_total_min', 'case_height_max_mm', 'case_length_max_mm', 'case_width_max_mm', 'bay_525_min', 'bay_25_min', 'bay_35_min', 'system_case_mode', 'custom_case_name']], ['Монитор и гарантия', ['monitor_diagonal_in_min', 'monitor_refresh_hz_min', 'aio_platform_mode', 'custom_aio_name', 'warranty_months_min']]];
 const emptyReq = () => ({ ...clone(state.reqDefaults), title: 'ТИП 1', quantity: 1, product_type: 'system', platform: null, manual_requirements: [], keyboard_source_mode: 'qx', mouse_source_mode: 'qx' });
-async function api(path, body, method = 'POST', headers = {}) {
-    const opt = { method: body === undefined && method === 'POST' ? 'GET' : method, headers: { ...headers } };
+async function api(path, body, method = 'POST', headers = {}, requestOptions = {}) {
+    const opt = { ...requestOptions, method: body === undefined && method === 'POST' ? 'GET' : method, headers: { ...headers } };
     if (body !== undefined) {
         if (body instanceof Blob || body instanceof ArrayBuffer) {
             opt.body = body;
@@ -39,7 +39,9 @@ async function api(path, body, method = 'POST', headers = {}) {
             msg = o.error || o.detail || msg;
         }
         catch { }
-        throw new Error(msg);
+        const error = new Error(Array.isArray(msg) ? msg.map(item => item.msg || String(item)).join('; ') : String(msg));
+        error.status = resp.status;
+        throw error;
     }
     if (resp.headers.get('content-type')?.includes('application/json'))
         return resp.json();
@@ -156,7 +158,7 @@ function dashboardDates() {
     }
     return events.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
 }
-function shell() { return `<div class="app-shell ${state.collapse ? 'collapsed' : ''}" style="--sidebar-current-width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><aside class="sidebar" style="width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><div class="brand"><div class="brand-logo">QX</div><div class="brand-text"><strong>QX <em>Подборщик</em></strong><small>QX WORKSPACE</small></div></div><div class="sidebar-menu"><div class="side-caption">РАБОЧАЯ ОБЛАСТЬ</div>${nav1.filter(([tab]) => tab === 'home').map(navBtn).join('')}${workspaceSidebar()}${tenderSidebar()}${nav1.filter(([tab]) => tab === 'notes').map(navBtn).join('')}<div class="side-caption">СПРАВОЧНИКИ</div>${nav2.map(navBtn).join('')}</div><div class="sidebar-bottom"><span class="fx">USD · ЦБ РФ ${state.rate.live ? '● актуальный' : '○ сохранённый'}</span><b>${fmt(state.rate.rate, 2)} ₽</b><small>Для расчёта: ${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</small><div class="toolbar"><button data-action="rate" class="btn secondary small mini-btn">↻ Курс</button><button data-action="dns" class="btn secondary small mini-btn">DNS ↗</button></div></div><button class="sidebar-collapse" data-action="collapse">${state.collapse ? '›' : '‹'}</button></aside><div class="main"><header class="topbar"><div class="crumbs">Рабочая область QX <span>›</span> <strong>${state.tab === 'tenders' ? 'Тендеры · ' + (state.tenders.selected ? 'Карточка закупки' : tenderViewTitles[state.tenders.view]) : titles[state.tab]}</strong></div><div class="top-right"><div class="top-rate">Расчётный USD <strong>${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</strong></div><span class="pill">● Локально</span>${headerActions()}</div></header><main class="content" id="content"><div class="page">${pageContent()}</div></main></div></div>${state.modal ? modal() : ''}`; }
+function shell() { return `<div class="app-shell ${state.collapse ? 'collapsed' : ''}" style="--sidebar-current-width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><aside class="sidebar" style="width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><div class="brand"><div class="brand-logo">QX</div><div class="brand-text"><strong>QX <em>Подборщик</em></strong><small>${esc(state.runtimeVersion || 'QX WORKSPACE')}</small></div></div><div class="sidebar-menu"><div class="side-caption">РАБОЧАЯ ОБЛАСТЬ</div>${nav1.filter(([tab]) => tab === 'home').map(navBtn).join('')}${workspaceSidebar()}${tenderSidebar()}${nav1.filter(([tab]) => tab === 'notes').map(navBtn).join('')}<div class="side-caption">СПРАВОЧНИКИ</div>${nav2.map(navBtn).join('')}</div><div class="sidebar-bottom"><span class="fx">USD · ЦБ РФ ${state.rate.live ? '● актуальный' : '○ сохранённый'}</span><b>${fmt(state.rate.rate, 2)} ₽</b><small>Для расчёта: ${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</small><div class="toolbar"><button data-action="rate" class="btn secondary small mini-btn">↻ Курс</button><button data-action="dns" class="btn secondary small mini-btn">DNS ↗</button></div></div><button class="sidebar-collapse" data-action="collapse">${state.collapse ? '›' : '‹'}</button></aside><div class="main"><header class="topbar"><div class="crumbs">Рабочая область QX <span>›</span> <strong>${state.tab === 'tenders' ? 'Тендеры · ' + (state.tenders.selected ? 'Карточка закупки' : tenderViewTitles[state.tenders.view]) : titles[state.tab]}</strong></div><div class="top-right"><div class="top-rate">Расчётный USD <strong>${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</strong></div><span class="pill">● Локально</span>${headerActions()}</div></header><main class="content" id="content"><div class="page">${pageContent()}</div></main></div></div>${state.modal ? modal() : ''}`; }
 function noteDate(v) { try {
     return new Date(v).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
@@ -356,21 +358,54 @@ function pageContent() {
 function pageHead(title, sub, buttons = '') { return `<div class="page-header"><div><div class="eyebrow">QX / 2026 / MODERN</div><h1>${title}</h1><div class="subtitle">${sub}</div></div><div class="toolbar">${buttons}</div></div>`; }
 function empty(title, sub, button) { return `<div class="empty"><div class="empty-icon">◇</div><strong>${title}</strong><p>${sub}</p>${button || ''}</div>`; }
 function posChips() { return state.reqs.length ? `<div class="position-list">${state.reqs.map((r, i) => `<button class="position-chip ${state.pos === i ? 'active' : ''}" data-action="pos" data-index="${i}">${esc(r.title || `Позиция ${i + 1}`)} <span>${esc(r.quantity || 0)} шт.</span></button>`).join('')}<button class="position-chip" data-action="new-position">＋ Позиция</button></div>` : ''; }
-function dashboardImportReport(result) {
-    if (!result) return '';
-    const docs = result.documents_result || {};
-    const fieldName = field => tenderLabels[typeof field === 'string' ? field : field.field] || (typeof field === 'string' ? field : field.field) || 'Поле';
+function dashboardImportReport(result, number = '') {
+    const matchesNumber = item => !number || item?.number === number || item?.tender?.number === number;
+    const job = matchesNumber(state.eisImportJob) ? state.eisImportJob : null;
+    const draft = matchesNumber(state.eisImportDraft) ? state.eisImportDraft : null;
+    if (result && !matchesNumber(result)) result = null;
+    const activeJob = job && ['queued', 'pending', 'running'].includes(job.status);
+    const active = !!activeJob || !job && state.eisImportBusy && (!number || draft?.number === number);
+    const tender = result?.tender || draft || (job?.tender_id ? { id: job.tender_id, number: job.number } : null);
+    const noticeNumber = job?.number || result?.tender?.number || draft?.number || number;
+    const cardButton = tender?.id ? `<button class="btn secondary small" data-action="tender-open" data-id="${esc(tender.id)}">Открыть карточку →</button>` : '';
+    const retryButton = `<button class="btn secondary small qx-import-retry" data-action="home-eis-import" data-number="${esc(noticeNumber || '')}" data-tender-id="${esc(tender?.id || '')}">↻ Повторить поиск</button>`;
+    const jobFailed = job && ['error', 'failed', 'cancelled', 'interrupted'].includes(job.status);
+    const error = !active && (jobFailed ? state.eisImportError || job.message || 'Поиск завершился с ошибкой.' : !number ? state.eisImportError : '');
+    if (active) {
+        const stages = { connecting: 'Соединение с ЕИС', queued: 'В очереди', pending: 'Ожидание запуска', started: 'Запуск поиска', metadata: 'Получение сведений', notice: 'Поиск извещения', xml: 'Получение XML ЕИС', notice_xml: 'Получение XML ЕИС', html: 'Проверка карточки ЕИС', notice_html: 'Проверка карточки ЕИС', fallback: 'Проверка дополнительных источников', documents: 'Загрузка документов', discover: 'Поиск ссылок на документы', discovery: 'Поиск ссылок на документы', download: 'Скачивание документов', saving: 'Сохранение результата', complete: 'Завершение поиска' };
+        const stage = job?.stage ? stages[job.stage] || job.stage : 'Запуск поиска';
+        const progress = typeof job?.progress === 'number' && Number.isFinite(job.progress) ? Math.max(0, Math.min(100, job.progress)) : null;
+        return `<div class="qx-import-feedback pending qx-import-job" role="status" aria-live="polite" aria-busy="true"><div class="qx-import-report"><div class="qx-import-report-head"><div><strong>${esc(stage)}</strong><span>${esc(job?.message || 'Ожидаем сведения о ходе загрузки.')}</span></div>${cardButton}</div><div class="qx-import-progress"><progress max="100" ${progress !== null ? `value="${progress}"` : ''} aria-label="Ход получения закупки">${progress !== null ? progress + '%' : 'Выполняется'}</progress>${progress !== null ? `<span>${Math.round(progress)}%</span>` : ''}</div><small class="qx-import-background">${noticeNumber ? `Закупка № ${esc(noticeNumber)}. ` : ''}${tender?.id ? 'Карточка уже создана. ' : ''}Можно продолжать работу в других разделах — поиск идёт в фоне.</small></div></div>`;
+    }
+    if (!result) {
+        if (!error) return '';
+        return `<div class="qx-import-feedback error" role="alert"><div class="qx-import-report"><div class="qx-import-report-head"><div><strong>Поиск не завершён</strong><span>${esc(error)}</span></div>${cardButton}</div><div class="qx-import-report-actions">${retryButton}</div></div></div>`;
+    }
+    const docs = result.documents_result;
+    const fieldName = field => tenderLabels[typeof field === 'string' ? field : field?.field] || (typeof field === 'string' ? field : field?.field) || 'Поле';
     const fields = result.fields_applied || [];
     const conflicts = result.conflicts || [];
     const missing = result.missing_fields || result.notice?.missing_fields || [];
     const warnings = result.warnings || [];
-    const failures = docs.failures || [];
+    const failures = docs?.failures || [];
+    const partial = result.partial || job?.status === 'partial';
+    const safeSourceLink = value => {
+        try {
+            const url = new URL(value);
+            return url.protocol === 'https:' && !url.username && !url.password ? url.href : '';
+        } catch { return ''; }
+    };
+    const sourceStatus = { success: 'Получено', available: 'Доступен', ok: 'Получено', verified: 'Проверен', error: 'Ошибка', failed: 'Недоступен', unavailable: 'Недоступен', blocked: 'Доступ ограничен', skipped: 'Пропущен', empty: 'Данные не найдены', not_found: 'Данные не найдены', partial: 'Частичные данные', fallback: 'Дополнительный источник' };
+    const sources = (result.sources || []).map(source => {
+        const url = safeSourceLink(source.url);
+        return `<li class="qx-import-source"><div><b>${esc(source.name || 'Источник')}</b>${source.status ? `<span class="qx-import-source-status">${esc(sourceStatus[source.status] || source.status)}</span>` : ''}</div>${source.message ? `<p>${esc(source.message)}</p>` : ''}${source.error_type ? `<small>${esc(({HTTP403: 'Доступ ограничен (HTTP 403)', HTTP404: 'Страница источника не найдена (HTTP 404)', URLError: 'Ошибка соединения с источником', TimeoutError: 'Источник не ответил за время ожидания', NoVerifiedFields: 'Проверяемые поля не найдены', ValueError: 'Страница или формат данных не распознаны'})[source.error_type] || source.error_type)}</small>` : ''}${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(new URL(url).hostname)} ↗</a>` : ''}</li>`;
+    }).join('');
     let official = '';
     try {
         const url = new URL(result.search_url);
         if (url.origin === 'https://zakupki.gov.ru' && !url.username && !url.password) official = url.href;
     } catch { }
-    return `<div class="qx-import-feedback ${result.partial ? 'partial' : ''}" role="status"><div class="qx-import-report"><div class="qx-import-report-head"><div><strong>${esc(result.tender?.title || 'Закупка обработана')}</strong><span>${esc(result.message || 'Результаты сохранены в карточке закупки.')}</span></div>${result.tender?.id ? `<button class="btn secondary small" data-action="tender-open" data-id="${esc(result.tender.id)}">Открыть карточку →</button>` : ''}</div><details class="qx-import-details"><summary>Что получено${result.partial ? ' · есть ограничения' : ''}</summary><div class="qx-import-counts">Заполнено полей: ${fields.length} · новых файлов: ${(docs.imported || []).length} · уже в базе: ${(docs.duplicates || []).length}</div>${fields.length ? `<p><b>Заполнено:</b> ${fields.map(field => esc(fieldName(field))).join(', ')}.</p>` : ''}${conflicts.length ? `<p><b>Сохранены ваши значения:</b> ${conflicts.map(field => esc(fieldName(field))).join(', ')}. Сверьте расхождения с извещением.</p>` : ''}${missing.length ? `<p><b>Не получено:</b> ${missing.map(field => esc(fieldName(field))).join(', ')}. Эти поля можно заполнить вручную.</p>` : ''}${warnings.map(warning => `<p>${esc(warning)}</p>`).join('')}${failures.length ? `<ul>${failures.map(failure => `<li>${esc(failure.name || failure.filename || 'Документ')}: ${esc(failure.reason || failure.message || 'не удалось загрузить')}</li>`).join('')}</ul>` : ''}${official ? `<a href="${esc(official)}" target="_blank" rel="noopener noreferrer">Открыть официальный поиск ЕИС ↗</a>` : ''}</details></div></div>`;
+    return `<div class="qx-import-feedback ${error ? 'error' : partial ? 'partial' : ''}" role="status"><div class="qx-import-report"><div class="qx-import-report-head"><div><strong>${esc(result.tender?.title || (partial ? 'Получена часть данных' : 'Результат поиска'))}</strong><span>${esc(error || result.message || 'Проверьте полученные сведения в отчёте.')}</span></div>${cardButton}</div>${partial || error ? `<div class="qx-import-report-actions">${retryButton}</div>` : ''}<details class="qx-import-details"><summary>Источники и результат${partial ? ' · есть ограничения' : ''}</summary><div class="qx-import-counts">Заполнено полей: ${fields.length}${docs ? ` · новых файлов: ${(docs.imported || []).length} · уже в базе: ${(docs.duplicates || []).length}` : ' · загрузка документов не запрашивалась'}</div>${result.metadata_source ? `<p><b>Источник сведений:</b> ${esc(result.metadata_source)}.</p>` : ''}${sources ? `<ul class="qx-import-sources">${sources}</ul>` : ''}${fields.length ? `<p><b>Заполнено:</b> ${fields.map(field => esc(fieldName(field))).join(', ')}.</p>` : ''}${conflicts.length ? `<p><b>Сохранены ваши значения:</b> ${conflicts.map(field => esc(fieldName(field))).join(', ')}. Сверьте расхождения с извещением.</p>` : ''}${missing.length ? `<p><b>Не получено:</b> ${missing.map(field => esc(fieldName(field))).join(', ')}. Эти поля можно заполнить вручную.</p>` : ''}${warnings.map(warning => `<p>${esc(warning)}</p>`).join('')}${failures.length ? `<ul>${failures.map(failure => `<li>${esc(failure.name || failure.filename || 'Документ')}: ${esc(failure.reason || failure.message || 'не удалось загрузить')}</li>`).join('')}</ul>` : ''}${official ? `<a href="${esc(official)}" target="_blank" rel="noopener noreferrer">Открыть официальный поиск ЕИС ↗</a>` : ''}</details></div></div>`;
 }
 function home() {
     const n = state.reqs.length;
@@ -383,10 +418,8 @@ function home() {
     <div class="qx-dashboard-heading"><div><div class="eyebrow">QX WORKSPACE</div><h1>Всё для следующей победы</h1><p class="subtitle">Закупки, комплектация и документы — ваш рабочий день в одном окне.</p></div><span class="qx-dashboard-date">${esc(new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' }))}</span></div>
     <div class="qx-dashboard-top">
       <section class="qx-purchase-hero" aria-labelledby="home-eis-title"><div class="qx-hero-label"><span class="qx-live-dot" aria-hidden="true"></span> БЫСТРЫЙ СТАРТ · ЕИС</div><h2 id="home-eis-title">Начните с номера закупки</h2><p>Получите сведения о закупке и доступные документы. QX создаст карточку или дополнит уже сохранённую.</p>
-        <form class="qx-purchase-form" id="home-eis-form"><label class="field" for="home-eis-number"><span>Номер извещения</span><input id="home-eis-number" name="notice_number" inputmode="numeric" autocomplete="off" maxlength="20" placeholder="11, 19 или 20 цифр" value="${esc(state.homeEisNumber || '')}" ${state.eisImportBusy ? 'disabled' : ''} aria-describedby="home-eis-help"></label><button type="button" class="btn primary" data-action="home-eis-import" ${state.eisImportBusy ? 'disabled' : ''}>${state.eisImportBusy ? 'Получаем данные…' : 'Найти закупку →'}</button></form>
+        <form class="qx-purchase-form" id="home-eis-form"><label class="field" for="home-eis-number"><span>Номер извещения</span><input id="home-eis-number" name="notice_number" inputmode="numeric" autocomplete="off" maxlength="2048" placeholder="Номер закупки или ссылка ЕИС" value="${esc(state.homeEisNumber || '')}" ${state.eisImportBusy ? 'disabled' : ''} aria-describedby="home-eis-help"></label><button type="button" class="btn primary" data-action="home-eis-import" ${state.eisImportBusy ? 'disabled' : ''}>${state.eisImportBusy ? 'Получаем данные…' : 'Найти закупку →'}</button></form>
         <label class="qx-purchase-docs"><input type="checkbox" id="home-eis-docs" ${state.homeEisDownloadDocuments !== false ? 'checked' : ''} ${state.eisImportBusy ? 'disabled' : ''}> Скачать доступные документы в карточку</label><small id="home-eis-help" class="qx-hero-help">44-ФЗ и 223-ФЗ · Если ЕИС ограничит доступ, QX покажет причину и сохранит полученные результаты.</small>
-        ${state.eisImportBusy ? '<div class="qx-import-feedback pending" role="status"><span class="qx-loader" aria-hidden="true"></span> Проверяем сведения и документы. Это может занять некоторое время.</div>' : ''}
-        ${state.eisImportError ? `<div class="qx-import-feedback error" role="alert">${esc(state.eisImportError)}</div>` : ''}
         ${dashboardImportReport(imported)}
       </section>
       <section class="panel qx-project-card" aria-label="Текущий расчёт"><div class="section-title"><h2>Текущий расчёт</h2><span class="qx-project-indicator">${n ? 'В работе' : 'Можно начинать'}</span></div><h3>${esc(n ? state.name : 'От ТЗ — к предложению')}</h3><p class="subtitle">${esc(n ? state.source_filename || 'Позиции добавлены вручную' : 'Загрузите задание или создайте расчёт вручную. Все этапы — в разделе слева.')}</p><ol class="qx-project-steps"><li class="${n ? 'is-done' : ''}"><span>${n ? '✓' : '1'}</span><div><b>ТЗ и требования</b><small>${n ? fmt(n) + ' позиций в проекте' : 'Загрузить и разобрать задание'}</small></div></li><li class="${state.plans.length ? 'is-done' : ''}"><span>${state.plans.length ? '✓' : '2'}</span><div><b>Комплектация и расчёт</b><small>${state.plans.length ? 'Есть рассчитанные комплектации' : 'Подобрать оборудование и цены'}</small></div></li><li><span>3</span><div><b>Проверка и документы</b><small>${state.plans.length ? warnings ? 'Замечаний к проверке: ' + warnings : 'Открыть проверку соответствия' : 'Подготовить итоговое предложение'}</small></div></li></ol><div class="toolbar"><button class="btn primary" data-action="${n ? 'tab' : 'upload'}" ${n ? 'data-tab="build"' : ''}>${n ? 'Продолжить расчёт →' : '↥ Загрузить ТЗ'}</button><button class="btn secondary" data-action="${n ? 'project-save' : 'new'}">${n ? 'Сохранить' : 'Вручную'}</button></div></section>
@@ -1383,13 +1416,93 @@ function onChange(e) {
         return;
     }
 }
-async function importEisByNumber(tenderId = '', downloadDocuments = true) {
+let eisPollTimer;
+let eisPollFailures = 0;
+const eisActive = job => ['queued', 'running'].includes(job?.status);
+async function eisJobApi(path, body) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try { return await api(path, body, 'POST', {}, { signal: controller.signal }); }
+    finally { clearTimeout(timeout); }
+}
+function refreshEisProgress() {
+    const active = document.activeElement;
+    if (active?.matches('input,textarea,select')) {
+        const feedback = document.querySelector('.qx-import-job');
+        if (feedback) feedback.outerHTML = dashboardImportReport(state.eisImportResult, state.tab === 'tenders' ? state.tenders.current?.number : '');
+        return;
+    }
+    if (state.tab === 'home' || state.tab === 'tenders') render();
+}
+function acceptEisJob(payload) {
+    const job = payload.job;
+    state.eisImportJob = job;
+    state.eisImportDraft = payload.tender || state.eisImportDraft;
+    state.eisImportBusy = eisActive(job);
+    state.eisImportResult = job.result || null;
+    state.eisImportError = job.status === 'failed' ? (job.message || 'Поиск не завершён. Карточка сохранена.') : '';
+    try {
+        if (eisActive(job)) localStorage.setItem('qx-eis-last-job', job.id);
+        else localStorage.removeItem('qx-eis-last-job');
+    } catch { }
+}
+async function pollEisJob(id) {
+    clearTimeout(eisPollTimer);
+    try {
+        const payload = await eisJobApi('eis/jobs/' + encodeURIComponent(id));
+        if (state.eisImportJob?.id !== id) return;
+        eisPollFailures = 0;
+        acceptEisJob(payload);
+        if (!eisActive(payload.job)) {
+            await loadTenders(null, false);
+            if (state.tenders.current?.id === payload.job.tender_id && !document.activeElement?.dataset?.tenderField)
+                await openTender(payload.job.tender_id, false);
+        }
+        refreshEisProgress();
+        if (eisActive(payload.job)) eisPollTimer = setTimeout(() => void pollEisJob(id), 700);
+    } catch (error) {
+        if (state.eisImportJob?.id !== id) return;
+        if (error.status !== 404 && ++eisPollFailures < 4) {
+            state.eisImportJob.message = 'Не удалось обновить ход поиска. Восстанавливаем связь с локальной программой…';
+            refreshEisProgress();
+            eisPollTimer = setTimeout(() => void pollEisJob(id), 2000);
+            return;
+        }
+        state.eisImportBusy = false;
+        state.eisImportJob = { ...state.eisImportJob, status: 'interrupted' };
+        state.eisImportError = error.status === 404 ? 'Задача больше не выполняется. Карточка и уже скачанные файлы сохранены; можно повторить поиск.' : 'Не удалось получить состояние поиска. Карточка сохранена. Откройте реестр или повторите поиск.';
+        await loadTenders(null, false);
+        refreshEisProgress();
+    }
+}
+async function restoreEisJobs() {
+    try {
+        let last;
+        try { last = localStorage.getItem('qx-eis-last-job'); } catch { }
+        let payload;
+        if (last) {
+            try { payload = await eisJobApi('eis/jobs/' + encodeURIComponent(last)); } catch { }
+        }
+        if (!payload) {
+            const active = await eisJobApi('eis/jobs');
+            const job = active.jobs?.[active.jobs.length - 1];
+            if (job) payload = await eisJobApi('eis/jobs/' + encodeURIComponent(job.id));
+        }
+        if (!payload || state.eisImportBusy) return;
+        state.homeEisNumber = payload.job.number;
+        acceptEisJob(payload);
+        refreshEisProgress();
+        if (eisActive(payload.job)) void pollEisJob(payload.job.id);
+    } catch { /* Older local server versions have no job API until restarted. */ }
+}
+async function importEisByNumber(tenderId = '', downloadDocuments = true, numberOverride = '') {
     if (state.eisImportBusy) return;
-    const raw = tenderId ? state.tenders.current?.number : ($('#home-eis-number')?.value || state.homeEisNumber || '');
+    const raw = numberOverride || (tenderId ? state.tenders.current?.number : ($('#home-eis-number')?.value || state.homeEisNumber || ''));
     const number = String(raw || '').trim();
-    if (!/^(?:\d{11}|\d{19,20})$/.test(number)) {
-        state.eisImportError = 'Введите номер извещения: 11, 19 или 20 цифр.';
+    if (!number || number.length > 2048) {
+        state.eisImportError = 'Введите номер извещения или ссылку на карточку ЕИС.';
         state.eisImportResult = null;
+        state.eisImportJob = null;
         render();
         $('#home-eis-number')?.focus();
         return;
@@ -1402,39 +1515,35 @@ async function importEisByNumber(tenderId = '', downloadDocuments = true) {
     state.eisImportBusy = true;
     state.eisImportError = '';
     state.eisImportResult = null;
+    state.eisImportDraft = null;
+    state.eisImportJob = null;
     render();
     try {
-        for (const id of [...tenderFieldSaves.keys()]) await flushTenderFields(id);
-        const result = await api('eis/import', { number, download_documents: downloadDocuments, tender_id: tenderId });
-        state.eisImportResult = result;
-        await loadTenders();
-        if (tenderId && state.tenders.selected === tenderId) await openTender(tenderId, false);
-        if (result.partial) toast(result.message || 'Часть сведений недоступна. Проверьте отчёт.', true);
-    }
-    catch (e) {
-        state.eisImportError = 'Не удалось получить закупку: ' + e.message;
-        toast(state.eisImportError, true);
-    }
-    finally {
-        state.eisImportBusy = false;
+        // An unrelated invalid edit must not prevent creating a new local card.
+        const candidates = number.match(/[0-9]{19,20}|[0-9]{11}/g) || [];
+        for (const [id, queue] of tenderFieldSaves)
+            if (id === tenderId || candidates.includes(queue.target?.number)) await flushTenderFields(id);
+        const payload = await eisJobApi('eis/jobs', { number, download_documents: downloadDocuments, tender_id: tenderId });
+        state.homeEisNumber = payload.job.number;
+        acceptEisJob(payload);
         render();
+        await loadTenders(null, false);
+        refreshEisProgress();
+        if (eisActive(payload.job)) void pollEisJob(payload.job.id);
+    } catch (error) {
+        state.eisImportBusy = false;
+        state.eisImportError = error.status === 404 ? 'Запущена старая версия локального сервера. Полностью закройте QX и запустите ЗАПУСТИТЬ_QX.cmd из обновлённой папки.' : (error.name === 'AbortError' ? 'Локальный сервер не ответил вовремя. Проверьте реестр: созданная карточка сохраняется независимо от поиска.' : 'Не удалось начать поиск: ' + error.message);
+        await loadTenders(null, false);
+        refreshEisProgress();
     }
 }
 function eisSyncReport(number) {
-    const r = state.eisImportResult;
-    if (!r || r.tender?.number !== number) return '';
-    const docs = r.documents_result || {};
-    const conflicts = r.conflicts || [];
-    return `<div class="note qx-eis-sync-report" role="status"><strong>${esc(r.message || '')}</strong>
-    <div>Заполнено полей: ${(r.fields_applied || []).length} · новых файлов: ${(docs.imported || []).length} · уже в базе: ${(docs.duplicates || []).length}</div>
-    ${conflicts.length ? `<p>Сохранены ваши значения: ${conflicts.map(c => esc(tenderLabels[c.field] || c.field)).join(', ')}. Расхождения можно сверить с извещением.</p>` : ''}
-    ${(r.warnings || []).map(w => `<div>${esc(w)}</div>`).join('')}
-    ${(docs.failures || []).map(f => `<div>${esc(f.reason || 'Файл недоступен')}</div>`).join('')}
-    </div>`;
+    const result = state.eisImportResult?.tender?.number === number ? state.eisImportResult : null;
+    return dashboardImportReport(result, number);
 }
 async function handleAction(el) {
     const a = el.dataset.action;
-    if (a === 'home-eis-import') return importEisByNumber();
+    if (a === 'home-eis-import') return importEisByNumber(el.dataset.tenderId || '', true, el.dataset.number || '');
     if (a === 'tender-eis-sync') return importEisByNumber(state.tenders.current?.id, true);
     if (a?.startsWith('notes-')) {
         if (a === 'notes-new')
@@ -1955,6 +2064,7 @@ async function init() {
     installGlobalEvents();
     try {
         const boot = await api('boot');
+        state.runtimeVersion = boot.version || '';
         state.settings = boot.settings || {};
         state.reqDefaults = boot.requirements_defaults || {};
         state.prices = boot.prices || {};
@@ -1965,6 +2075,7 @@ async function init() {
         state.arsenalFields = { ...state.arsenalFields, sender: state.settings.default_sender || 'ЗИОН', country: state.settings.default_country || 'Россия', trademark: state.settings.default_trademark || '1093786' };
         render();
         void loadTenders();
+        void restoreEisJobs();
         api('rate').then(rate => {
             state.rate = rate;
             const active = document.activeElement;
@@ -1999,13 +2110,13 @@ state.tenderEisLookup = null;
 let tenderSyncTimer;
 const tenderDate = (s) => s ? new Date(s + 'T12:00:00').toLocaleDateString('ru-RU') : '—';
 const tenderStatusColor = (s) => s === 'Контракт исполнен' ? 'ok' : s === 'Проиграли' || s === 'Отменено' ? 'bad' : s?.includes('подписан') ? 'ok' : 'unknown';
-async function loadTenders(selected = null) {
+async function loadTenders(selected = null, redraw = true) {
     try {
         const [res, rem, noteResult] = await Promise.all([api('tenders', undefined, 'GET'), api('tenders/reminders', undefined, 'GET'), api('calendar/notes', undefined, 'GET')]);
         Object.assign(state.tenders, { loaded: true, items: res.items || [], organizations: res.organizations || [], summary: res.summary || {}, statuses: res.statuses || [], reminders: rem.items || [], reminderSettings: rem.settings || { enabled: false, advance_days: 7 }, calendarNotes: (noteResult.items || []).map(n => { const editing = notesState.items.find(x => x.id === n.id); return editing && Number(editing._editRev || 0) > Number(n.revision || 0) ? {...n, ...editing} : n; }) });
         if (selected)
             await openTender(selected, false);
-        if (state.tab === 'tenders' || (state.tab === 'home' && document.activeElement?.id !== 'home-eis-number'))
+        if (redraw && (state.tab === 'tenders' || (state.tab === 'home' && document.activeElement?.id !== 'home-eis-number')))
             render();
     }
     catch (e) {
@@ -2054,7 +2165,7 @@ function tenderDetail() {
   <div class="panel" data-tender-panel="docs" ${panelVis('docs')}><div class="section-title"><h2>Документы</h2><span class="badge-count">${docs.length}</span></div><button class="btn primary tender-upload" data-action="tender-upload-open">＋ Добавить документ</button><button class="btn secondary" data-action="tender-auto-contract">✧ Извлечь условия и заполнить контракт</button><p class="subtitle" style="margin:8px 0">Найденные в документах однозначные условия переносятся в пустые поля. Существующие данные не перезаписываются; спорные предложения требуют проверки.</p><button class="btn secondary tender-upload" data-action="tender-package-open">⇧ Загрузить пакет ZIP</button>
   <div class="qx-eis-discovery"><div><strong>Документы закупки из ЕИС</strong><p class="subtitle">Поиск по номеру ${esc(t.number || 'закупки')} на публичных страницах ЕИС. Без логина и обхода капчи. Сначала проверьте найденные ссылки, потом загрузите файлы в карточку.</p></div>
     <div class="toolbar"><button class="btn primary" data-action="tender-eis-discover">⌕ Найти документы</button><button class="btn secondary" data-action="tender-eis-discover-import">↓ Скачать найденные</button></div>
-    ${state.tenderEisDiscovery && state.tenderEisDiscovery.notice_number === t.number ? `<div class="qx-eis-discovery-results" role="status"><b>${esc(state.tenderEisDiscovery.message || '')}</b><small>Просмотрено страниц: ${Number(state.tenderEisDiscovery.checked_pages || 0)} · найдено ссылок: ${Number(state.tenderEisDiscovery.found || 0)}</small>${(state.tenderEisDiscovery.documents || []).map(d => `<div class="qx-eis-file"><span>▤ ${esc(d.title)}</span><span title="Адрес найденного файла">${esc(d.url.split('?')[0].slice(-90))}</span></div>`).join('')}<a href="${esc(state.tenderEisDiscovery.search_url)}" target="_blank" rel="noopener noreferrer">Открыть официальный поиск ЕИС ↗</a></div>` : ''}</div><div class="toolbar" style="margin-top:12px"><textarea id="tender-eis-doc-url" aria-label="Ссылки на документы ЕИС" rows="3" placeholder="Вставьте прямые HTTPS-ссылки на PDF, Word, XML или ZIP с zakupki.gov.ru (каждая с новой строки)" style="min-width:280px;flex:1;resize:vertical"></textarea><button class="btn secondary" data-action="tender-eis-document-url">↓ Загрузить из ЕИС</button></div><p class="subtitle">Вставьте до 10 прямых ссылок на файлы (каждую с новой строки). Ссылки на страницу закупки не скачивают документацию; если файл закрыт или сайт требует вход, загрузите его вручную.</p>${tenderEisImportReport()}<div class="tender-doc-list">${docs.map(doc => `<div class="activity-item"><span class="activity-icon">▤</span><div><strong>${esc(doc.filename)}</strong><small>${esc(doc.created_at?.slice(0, 16) || '')}${/\.(doc|xls|rtf)$/i.test(doc.filename) ? ' · Оригинал сохранён; автоматический разбор недоступен' : ''}</small></div>${/\.(docx|pdf|xlsx|xlsm|txt|csv|md)$/i.test(doc.filename) ? `<button class="btn primary small" data-action="tender-use-tz" data-id="${esc(doc.id)}">В расчёт как ТЗ</button>` : ''}<button class="btn secondary small" data-action="tender-download" data-id="${esc(doc.id)}">Скачать</button><button class="btn secondary small" data-action="tender-delete-doc" data-id="${esc(doc.id)}" title="Удалить из закупки">Удалить</button></div>`).join('') || '<p class="subtitle">Пока нет файлов. Загрузите ТЗ, проект контракта и приложения.</p>'}</div></div>
+    ${state.tenderEisDiscovery && state.tenderEisDiscovery.notice_number === t.number ? `<div class="qx-eis-discovery-results" role="status"><b>${esc(state.tenderEisDiscovery.message || '')}</b><small>Просмотрено страниц: ${Number(state.tenderEisDiscovery.checked_pages || 0)} · найдено ссылок: ${Number(state.tenderEisDiscovery.found || 0)}</small>${(state.tenderEisDiscovery.documents || []).map(d => `<div class="qx-eis-file"><span>▤ ${esc(d.title)}</span><span title="Адрес найденного файла">${esc(d.url.split('?')[0].slice(-90))}</span></div>`).join('')}<a href="${esc(state.tenderEisDiscovery.search_url)}" target="_blank" rel="noopener noreferrer">Открыть официальный поиск ЕИС ↗</a></div>` : ''}</div><div class="toolbar" style="margin-top:12px"><textarea id="tender-eis-doc-url" aria-label="Ссылки на документы ЕИС" rows="3" placeholder="Вставьте прямые HTTPS-ссылки на PDF, Word, XML или ZIP с zakupki.gov.ru (каждая с новой строки)" style="min-width:280px;flex:1;resize:vertical"></textarea><button class="btn secondary" data-action="tender-eis-document-url">↓ Загрузить из ЕИС</button></div><p class="subtitle">Вставьте до 10 прямых ссылок на файлы (каждую с новой строки). Ссылки на страницу закупки не скачивают документацию; если файл закрыт или сайт требует вход, загрузите его вручную.</p>${tenderEisImportReport()}<div class="tender-doc-list">${docs.map(doc => `<div class="activity-item"><span class="activity-icon">▤</span><div><strong>${esc(doc.filename)}</strong><small>${esc(doc.created_at?.slice(0, 16) || '')}${/\.(doc|xls|rtf|rar|7z)$/i.test(doc.filename) ? ' · Оригинал сохранён; автоматический разбор недоступен' : ''}</small></div>${/\.(docx|pdf|xlsx|xlsm|txt|csv|md)$/i.test(doc.filename) ? `<button class="btn primary small" data-action="tender-use-tz" data-id="${esc(doc.id)}">В расчёт как ТЗ</button>` : ''}<button class="btn secondary small" data-action="tender-download" data-id="${esc(doc.id)}">Скачать</button><button class="btn secondary small" data-action="tender-delete-doc" data-id="${esc(doc.id)}" title="Удалить из закупки">Удалить</button></div>`).join('') || '<p class="subtitle">Пока нет файлов. Загрузите ТЗ, проект контракта и приложения.</p>'}</div></div>
   <div class="panel" data-tender-panel="comments" ${panelVis('comments')}><div class="section-title"><h2>Комментарии и поручения</h2><span class="badge-count">${comm.length}</span></div><textarea id="tender-comment" rows="3" placeholder="Например: ожидаем реестровую запись BIOS от завода…"></textarea><div class="toolbar" style="justify-content:flex-end;margin:8px 0 14px"><button class="btn primary" data-action="tender-comment">Сохранить комментарий</button></div>${comm.map(c => `<div class="tender-comment"><small>${esc(c.created_at)}</small><textarea rows="2" data-comment-edit="${esc(c.id)}" aria-label="Текст комментария">${esc(c.body)}</textarea><div class="toolbar" style="justify-content:flex-end;margin-top:6px"><button class="btn secondary small" data-action="tender-save-comment" data-id="${esc(c.id)}">Сохранить изменения</button><button class="btn secondary small" data-action="tender-delete-comment" data-id="${esc(c.id)}">Удалить</button></div></div>`).join('')}</div>
   <div class="panel" data-tender-panel="shipments" ${panelVis('shipments')}>
     <div class="section-title"><div><h2>План поставок</h2><p class="subtitle">Разбей поставку на партии, укажи количество и крайние даты. Статусы можно отмечать по мере исполнения.</p></div><span class="badge-count">${ship.length} этапов</span></div>

@@ -21,6 +21,15 @@ MAX_RESPONSE = 2 * 1024 * 1024
 NOTICE = re.compile(r'^(?:[0-9]{11}|[0-9]{19,20})$')
 
 
+def network_error_type(exc):
+    """Expose an actionable status without logging URLs, headers or credentials."""
+    if isinstance(exc,HTTPError): return 'HTTP' + str(exc.code)
+    reason = getattr(exc,'reason',None)
+    if reason is not None and type(reason).__name__ in ('SSLError','SSLCertVerificationError'):
+        return 'TLSVerificationError'
+    return type(exc).__name__
+
+
 def validate_notice(value: str) -> str:
     value = str(value or '').strip()
     if not NOTICE.fullmatch(value):
@@ -132,19 +141,36 @@ def lookup_notice(number: str, opener=None):
         return {'available':False, 'matches':[], 'search_url':search,
                 'message':'Автоматически получить данные из ЕИС не удалось. Откройте официальный поиск или добавьте документацию вручную.',
                 'source':'Публичная RSS-выдача ЕИС (недоступна)',
-                'error_type':type(exc).__name__}
+                'error_type':network_error_type(exc)}
 
 # Public print-form XML is not a guaranteed API: EIS may block it or change its
 # schema. Every extracted value must have a clear official XML element and an
 # exact purchase number in the same document. Fail closed on ambiguity.
 XML_NOTICE_PATH = '/epz/order/notice/printForm/viewXml.html'
 
+
+def _notice_xml_root(data: bytes):
+    if len(data) > MAX_RESPONSE: raise ValueError('Извещение ЕИС превышает допустимый размер')
+    try:
+        root = ET.fromstring(data)
+        if root.tag.rsplit('}',1)[-1].lower() != 'html': return root
+    except ET.ParseError:
+        if b'<pre' not in data[:20000].lower(): raise
+    # Some print-form responses wrap escaped source XML in an HTML <pre>.
+    # Read that element only; never execute scripts or flatten an arbitrary page.
+    from bs4 import BeautifulSoup
+    pre = BeautifulSoup(data,'html.parser').find('pre')
+    if not pre: raise ValueError('ЕИС вернула HTML вместо XML извещения')
+    payload = pre.get_text().strip().encode('utf-8')
+    if not payload.startswith(b'<'): raise ValueError('В печатной форме нет XML извещения')
+    return ET.fromstring(payload)
+
 def parse_notice_metadata(xml: bytes, number: str) -> dict:
     """Read only identified fields from a public EIS document; no AI guesses."""
     number = validate_notice(number)
     if len(xml) > MAX_RESPONSE:
         raise ValueError('Извещение ЕИС превышает допустимый размер')
-    root = ET.fromstring(xml)
+    root = _notice_xml_root(xml)
     names = {}
     for el in root.iter():
         tag = el.tag.rsplit('}', 1)[-1].lower()
@@ -158,6 +184,16 @@ def parse_notice_metadata(xml: bytes, number: str) -> dict:
     numbers = {v for tag in number_names for v in names.get(tag, [])}
     if not numbers:
         numbers = set(names.get('regnumber', []))
+    notice_223 = []
+    if len(number) == 11:
+        registrations = set()
+        for node in root.iter():
+            if node.tag.rsplit('}',1)[-1].lower() != 'purchasenoticedata': continue
+            identifiers = [child for child in node if child.tag.rsplit('}',1)[-1].lower() == 'registrationnumber']
+            registrations.update((child.text or '').strip() for child in identifiers)
+            if len(identifiers) == 1 and (identifiers[0].text or '').strip() == number:
+                notice_223.append(node)
+        if not numbers: numbers = registrations
     if numbers != {number}:
         raise ValueError('Ответ ЕИС не содержит точного номера извещения')
 
@@ -174,6 +210,10 @@ def parse_notice_metadata(xml: bytes, number: str) -> dict:
         'application_due_time': '',
         'law': '',
     }
+    if notice_223 and not info['title']:
+        titles = [(child.text or '').strip() for child in notice_223[0]
+                  if child.tag.rsplit('}',1)[-1].lower() == 'name']
+        if len(titles) == 1: info['title'] = titles[0][:500]
     # Prefer a precise customer node over broad 'fullName' (which can include
     # a contact or an organizer). Never assign it from multiple candidates.
     customers=[]
@@ -194,7 +234,7 @@ def parse_notice_metadata(xml: bytes, number: str) -> dict:
     raw_price = unique('maxprice', 'maxpricetotal', 'initialsum', 'initialmaxcontractprice')
     if raw_price and re.fullmatch(r'\d+(?:[,.]\d{1,2})?', raw_price.replace(' ', '')):
         info['nmck'] = raw_price.replace(' ', '').replace(',', '.')
-    date_raw = unique('enddate', 'submissionclosedate', 'enddateapplication', 'enddateapplications')
+    date_raw = unique('enddate', 'submissionclosedate', 'enddateapplication', 'enddateapplications', 'enddt')
     m = re.fullmatch(r'(\d{4}-\d{2}-\d{2})(?:[T ](\d\d:\d\d)(?::\d\d)?)?(?:Z|[+-]\d\d:?\d\d)?', date_raw)
     if m:
         from datetime import date as _date
@@ -234,6 +274,32 @@ def parse_notice_metadata(xml: bytes, number: str) -> dict:
     return info
 
 
+def extract_xml_document_links(xml: bytes, number: str, *, base_url='https://zakupki.gov.ru/') -> list[dict]:
+    """Source-declared attachment URLs from an exact-number verified XML notice."""
+    parse_notice_metadata(xml,number)
+    root = _notice_xml_root(xml)
+    from modern.eis_resolver import official_https_url
+    records, seen = [], set()
+    for section in root.iter():
+        if section.tag.rsplit('}',1)[-1].lower() not in ('attachments','attachmentlist'):
+            continue
+        for document in section.iter():
+            if document.tag.rsplit('}',1)[-1].lower() not in ('document','attachment','attachmentinfo'): continue
+            values = {}
+            for child in document:
+                if not list(child): values[child.tag.rsplit('}',1)[-1].lower()] = (child.text or '').strip()
+            raw_url = values.get('url') or values.get('downloadurl')
+            if not raw_url: continue
+            try: url = official_https_url(raw_url,base_url,upgrade_http=True)
+            except (ValueError,TypeError): continue
+            if url in seen: continue
+            seen.add(url)
+            records.append({'url':url,'title':(values.get('filename') or values.get('description') or 'Документ ЕИС')[:200],
+                            'source_page':base_url})
+            if len(records) >= 81: return records
+    return records
+
+
 def fetch_notice_metadata(number: str, opener=None) -> dict:
     """Fetch public EIS XML for one explicit user-supplied number, at most 7 sec."""
     number = validate_notice(number)
@@ -253,9 +319,11 @@ def fetch_notice_metadata(number: str, opener=None) -> dict:
         if len(data) > MAX_RESPONSE:
             raise ValueError('Слишком большой ответ ЕИС')
         result = parse_notice_metadata(data, number)
+        documents = extract_xml_document_links(data,number,base_url=url)
         return {'available':True,'notice':result,'source_url':url,
+                'documents':documents[:40], 'document_limit':40, 'documents_limit_reached':len(documents)>40,
                 'search_url':search,'message':'Поля получены из публичного XML ЕИС по точному номеру. Проверьте актуальную редакцию извещения.'}
     except (HTTPError, URLError, OSError, ValueError, ET.ParseError, DefusedXmlException) as exc:
         return {'available':False,'notice':None,'source_url':url,'search_url':search,
                 'message':'ЕИС не предоставила проверяемую XML-карточку. Введите сведения вручную либо откройте официальный поиск.',
-                'error_type':type(exc).__name__}
+                'error_type':network_error_type(exc)}

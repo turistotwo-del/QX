@@ -7,12 +7,44 @@ import traceback
 from datetime import datetime
 
 
+def _load_eis_dependencies() -> None:
+    """Import provider dependencies without requesting data or starting models."""
+    import importlib
+    for module in ('requests', 'bs4', 'defusedxml', 'modern.eis_sync', 'modern.eis_jobs'):
+        importlib.import_module(module)
+
+
+def eis_dependency_selfcheck() -> int:
+    # tender_store initializes on import; never use a real profile for this probe.
+    names = ('QX_DATA_DIR', 'QX_CATALOG_DIR', 'QX_PORTABLE_DATA_DIR')
+    previous = {name: os.environ.get(name) for name in names}
+    try:
+        with tempfile.TemporaryDirectory(prefix='qx_eis_dependencies_') as home:
+            for name in names:
+                os.environ[name] = str(Path(home) / name.lower())
+            _load_eis_dependencies()
+        print('QX EIS dependencies: OK')
+        return 0
+    except Exception as exc:
+        print('QX EIS dependencies: FAILED:', type(exc).__name__,
+              'Required EIS libraries are missing or incompatible; repair the private runtime.', file=sys.stderr)
+        return 1
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
 def selfcheck() -> int:
     """Non-GUI smoke test of the real frozen app; used by Windows CI."""
     try:
         with tempfile.TemporaryDirectory(prefix='qx_selfcheck_') as home:
             os.environ['QX_DATA_DIR'] = home
             os.environ['QX_CATALOG_DIR'] = str(Path(home) / 'catalog')
+            os.environ['QX_PORTABLE_DATA_DIR'] = str(Path(home) / 'portable')
+            _load_eis_dependencies()
             from modern import tender_store
             from modern.server import STATIC, boot, health
             if not (Path(STATIC) / 'index.html').is_file():
@@ -90,6 +122,8 @@ def main():
         from modern.release_info import RELEASE_LABEL
         print('QX Подборщик ' + RELEASE_LABEL)
         return 0
+    if '--eis-selfcheck' in sys.argv:
+        return eis_dependency_selfcheck()
     if '--selfcheck' in sys.argv:
         return selfcheck()
     if '--data-selfcheck' in sys.argv:

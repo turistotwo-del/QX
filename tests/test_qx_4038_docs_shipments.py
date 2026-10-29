@@ -44,7 +44,7 @@ class TestEisDiscovery(unittest.TestCase):
            <a href="/44fz/filestore/contract.pdf">Проект контракта</a>
            <a href="/epz/order/notice/ea20/view/documents.html?regNumber=9999999999999999999">Чужая закупка</a>'''
         op = Pages({PAGE:contents, DOC_PAGE:other})
-        r=discover_public_documents(NOTICE,opener=op)
+        r=discover_public_documents(NOTICE,opener=op,entry_urls=[PAGE])
         self.assertTrue(r['available'])
         self.assertEqual(len(r['documents']),1)
         self.assertEqual(r['documents'][0]['url'],FILE)
@@ -58,7 +58,7 @@ class TestEisDiscovery(unittest.TestCase):
         docs, _=extract_page_links(body.encode(),PAGE,NOTICE)
         self.assertEqual(docs,[])
     def test_error_or_captcha_never_fakes_documents(self):
-        r=discover_public_documents(NOTICE,opener=Pages({PAGE:'<html>Captcha required</html>'}))
+        r=discover_public_documents(NOTICE,opener=Pages({PAGE:'<html>Captcha required</html>'}),entry_urls=[PAGE])
         self.assertFalse(r['available'])
         self.assertEqual(r['documents'],[])
     def test_exact_notice_validation(self):

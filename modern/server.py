@@ -40,6 +40,15 @@ app.add_middleware(LocalBrowserProtection)
 STATIC = Path(__file__).resolve().parent / 'web'
 SAFE_KINDS = {'case', 'aio', 'monitor', 'keyboard', 'mouse', 'equipment_profile', 'price_list', 'supplier_price', 'pc_case', 'aio_platform'}
 
+
+@app.middleware('http')
+async def fresh_workspace_assets(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path in ('/', '/index.html', '/app.js', '/style.css', '/api/boot'):
+        response.headers['Cache-Control'] = 'no-store, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
 def b64decode(value):
     return base64.b64decode(value) if value else b''
 
@@ -864,6 +873,42 @@ class EisImportRequest(BaseModel):
     number: StrictStr = Field(min_length=11, max_length=20)
     download_documents: StrictBool = True
     tender_id: StrictStr = Field(default='', max_length=100)
+
+
+class EisJobRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    number: StrictStr = Field(min_length=1, max_length=2048)
+    download_documents: StrictBool = True
+    tender_id: StrictStr = Field(default='', max_length=100)
+
+
+@app.post('/api/eis/jobs', status_code=202)
+def start_eis_job(body: EisJobRequest):
+    from modern.eis_jobs import start_job, JobQueueFull
+    try:
+        return start_job(body.number, download_documents=body.download_documents, tender_id=body.tender_id)
+    except JobQueueFull as exc:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({'error': str(exc), 'tender': tenders.detail(exc.tender_id)}, status_code=429)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get('/api/eis/jobs')
+def list_eis_jobs():
+    from modern.eis_jobs import active_jobs
+    return active_jobs()
+
+
+@app.get('/api/eis/jobs/{job_id}')
+def read_eis_job(job_id: str):
+    from modern.eis_jobs import get_job
+    try:
+        return get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(404, 'Задача больше не выполняется. Карточка и скачанные файлы сохранены.') from exc
 
 
 @app.post('/api/eis/import')

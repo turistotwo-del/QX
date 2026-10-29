@@ -168,8 +168,8 @@ def document_segments(filename: str, data: bytes, limit=3500):
         raw = data.decode('utf-8-sig', errors='replace')
         for i, line in enumerate(raw.splitlines(), 1):
             push(line, f'строка {i}')
-    elif ext in ('.doc', '.xls', '.rtf'):
-        raise ValueError('Оригинал DOC/XLS/RTF сохранён; автоматический анализ этого формата недоступен. Проверьте вручную.')
+    elif ext in ('.doc', '.xls', '.rtf', '.rar', '.7z'):
+        raise ValueError('Оригинал DOC/XLS/RTF/RAR/7z сохранён; автоматический анализ этого формата недоступен. Проверьте вручную.')
     else:
         raise ValueError('Формат не поддерживается')
 

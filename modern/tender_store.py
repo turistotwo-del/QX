@@ -311,7 +311,7 @@ def delete_tender(tender_id):
         path = Path(doc['file_path'])
         if path.parent.resolve() != DOCUMENTS.resolve():
             continue
-        if not re.fullmatch(r'[0-9a-f]{64}\.(pdf|docx|xlsx|xlsm|txt|md|csv|xml|qxproj|doc|xls|rtf)', path.name):
+        if not re.fullmatch(r'[0-9a-f]{64}\.(pdf|docx|xlsx|xlsm|txt|md|csv|xml|qxproj|doc|xls|rtf|rar|7z)', path.name):
             continue
         if not path.name.startswith(doc['sha256'] + '.'):
             continue
@@ -436,7 +436,7 @@ def add_document(tid, filename, contents, text=''):
     if not get(tid): raise KeyError('Закупка не найдена')
     if len(contents)>30*1024*1024: raise ValueError('Документ больше 30 МБ')
     ext=Path(filename).suffix.lower()
-    if ext not in ('.pdf','.docx','.xlsx','.xlsm','.txt','.md','.csv','.xml','.qxproj','.doc','.xls','.rtf'): raise ValueError('Неподдерживаемый документ')
+    if ext not in ('.pdf','.docx','.xlsx','.xlsm','.txt','.md','.csv','.xml','.qxproj','.doc','.xls','.rtf','.rar','.7z'): raise ValueError('Неподдерживаемый документ')
     from modern.attachment_formats import RAW_EXTENSIONS, validate_raw_document
     if ext in RAW_EXTENSIONS: validate_raw_document(filename, contents)
     DOCUMENTS.mkdir(parents=True,exist_ok=True)
@@ -478,7 +478,7 @@ def add_documents_batch(tid, entries):
         if not isinstance(data, bytes) or len(data)>30*1024*1024:
             raise ValueError('Некорректные данные документа')
         ext=Path(filename).suffix.lower()
-        if ext not in ('.pdf','.docx','.xlsx','.xlsm','.txt','.md','.csv','.xml','.doc','.xls','.rtf'):
+        if ext not in ('.pdf','.docx','.xlsx','.xlsm','.txt','.md','.csv','.xml','.doc','.xls','.rtf','.rar','.7z'):
             raise ValueError('Недопустимый формат документа')
         from modern.attachment_formats import RAW_EXTENSIONS, validate_raw_document
         if ext in RAW_EXTENSIONS: validate_raw_document(filename, data)

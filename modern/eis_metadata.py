@@ -8,9 +8,9 @@ from urllib.error import HTTPError, URLError
 from bs4 import BeautifulSoup
 from time import monotonic
 
-from modern.eis_public import validate_notice, official_search_url
+from modern.eis_public import validate_notice, official_search_url, network_error_type
 from modern.eis_discovery import _is_notice_context, ROOT, MAX_PAGE
-from modern.eis_document_download import OfficialRedirects
+from modern.eis_document_download import OfficialRedirects, build_official_opener
 from modern.eis_resolver import resolve_notice_pages
 
 
@@ -39,22 +39,37 @@ def parse_notice_html(data: bytes, number: str) -> dict:
         'начальная (максимальная) цена договора': 'nmck',
         'дата и время окончания срока подачи заявок': 'application_due',
         'дата и время окончания подачи заявок': 'application_due',
+        'окончание подачи заявок': 'application_due',
+        'начальная цена': 'nmck',
         'дата и время проведения электронного аукциона': 'auction',
         'дата подведения итогов определения поставщика (подрядчика, исполнителя)': 'results',
         'место поставки товара, выполнения работы или оказания услуги': 'supply_address',
     }
     values = {}
     # Both current and older public EIS layouts use these section markers.
-    for section in soup.select('.cardMainInfo__section, .blockInfo__section, .sectionInfo'):
+    for section in soup.select('.cardMainInfo__section, .blockInfo__section, .sectionInfo, div.price'):
         label = section.select_one('.cardMainInfo__title, .section__title, .sectionInfo__title')
         content = section.select_one('.cardMainInfo__content, .section__info, .sectionInfo__body')
         if not label or not content:
-            continue
+            # Older EIS main blocks expose label and value as plain spans.
+            spans = section.find_all('span',recursive=False)
+            if len(spans) >= 2:
+                label,content = spans[0],spans[1]
+            else:
+                continue
         key = re.sub(r'\s+', ' ', label.get_text(' ', strip=True)).strip(' :').lower()
         field = labels.get(key)
         value = re.sub(r'\s+', ' ', content.get_text(' ', strip=True)).strip()
         if field and value:
             values.setdefault(field, set()).add(value)
+    # Older 223 public cards used a two-cell key/value table.
+    for row in soup.select('tr'):
+        cells = row.find_all(['td','th'],recursive=False)
+        if len(cells) != 2: continue
+        key = re.sub(r'\s+',' ',cells[0].get_text(' ',strip=True)).strip(' :').lower()
+        if key in labels:
+            value = re.sub(r'\s+',' ',cells[1].get_text(' ',strip=True)).strip()
+            if value: values.setdefault(labels[key],set()).add(value)
     result = {'number':number, 'verified':True}
     for key, candidates in values.items():
         if len(candidates) != 1:
@@ -65,7 +80,7 @@ def parse_notice_html(data: bytes, number: str) -> dict:
             if price:
                 result[key] = re.sub(r'\s+', '', price[1]).replace(',', '.')
         elif key in ('application_due', 'auction', 'results'):
-            match = re.fullmatch(r'(\d{2}\.\d{2}\.\d{4})(?:\s+(\d{2}:\d{2}))?(?:\s*\(МСК(?:[+-]\d+)?\))?', value, re.I)
+            match = re.fullmatch(r'(\d{2}\.\d{2}\.\d{4})(?:\s+(?:в\s+)?(\d{2}:\d{2})(?::\d{2})?)?(?:\s*\(МСК(?:[+-]\d+)?\))?', value, re.I)
             if match:
                 try:
                     parsed = datetime.strptime(match[1] + (' ' + match[2] if match[2] else ''),
@@ -87,7 +102,7 @@ def parse_notice_html(data: bytes, number: str) -> dict:
 def fetch_notice_html_metadata(number: str, opener=None) -> dict:
     number = validate_notice(number)
     url = notice_page_url(number)
-    opener = opener or build_opener(OfficialRedirects())
+    opener = opener or build_official_opener()
     deadline = monotonic() + 20
     resolution = resolve_notice_pages(number, opener=opener)
     candidates = resolution['notice_urls'] or [url]
@@ -101,14 +116,14 @@ def fetch_notice_html_metadata(number: str, opener=None) -> dict:
                                              'Accept':'text/html', 'Accept-Encoding':'identity'})
             with opener.open(req, timeout=max(.1, min(8, deadline - monotonic()))) as response:
                 final_url = response.geturl()
-                if not _is_notice_context(final_url, number):
+                if not _is_notice_context(final_url, number, bound_urls=candidates):
                     raise ValueError('ЕИС перенаправила на другую закупку')
                 payload = response.read(MAX_PAGE + 1)
             return {'available':True, 'notice':parse_notice_html(payload, number),
                     'source_url':final_url, 'search_url':official_search_url(number),
                     'message':'Получены однозначные подписанные поля публичной карточки ЕИС. Время с явным часовым поясом не подставляется; проверьте его в ЕИС.'}
         except (HTTPError, URLError, OSError, ValueError, TimeoutError) as exc:
-            errors.append(type(exc).__name__)
+            errors.append(network_error_type(exc))
     return {'available':False, 'notice':None, 'source_url':url,
             'search_url':official_search_url(number), 'error_type':errors[-1] if errors else 'NoVerifiedFields',
             'errors':errors,

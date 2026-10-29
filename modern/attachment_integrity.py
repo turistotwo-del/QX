@@ -11,7 +11,7 @@ from hashlib import sha256
 from pathlib import Path
 import re
 
-EXTENSIONS = {'.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.xml', '.qxproj', '.doc', '.xls', '.rtf'}
+EXTENSIONS = {'.pdf', '.docx', '.xlsx', '.xlsm', '.txt', '.md', '.csv', '.xml', '.qxproj', '.doc', '.xls', '.rtf', '.rar', '.7z'}
 MAX_ATTACHMENT = 30 * 1024 * 1024
 _DIGEST = re.compile(r'[0-9a-f]{64}\Z')
 

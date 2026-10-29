@@ -5,7 +5,7 @@ Windows.  Keep this flag visible rather than claiming production readiness.
 """
 from __future__ import annotations
 
-APP_VERSION = '4.0.39'
+APP_VERSION = '4.0.40'
 BUILD_CHANNEL = 'development'
 RELEASE_LABEL = f'{APP_VERSION} ({BUILD_CHANNEL})'
 SETUP_BASENAME = 'QX_Setup_' + APP_VERSION.replace('.', '_') + '_DEV'

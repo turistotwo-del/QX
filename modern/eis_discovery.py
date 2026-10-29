@@ -12,10 +12,10 @@ from urllib.error import HTTPError, URLError
 import re
 from time import monotonic
 
-from modern.eis_public import validate_notice, official_search_url, lookup_notice
-from modern.eis_document_download import validate_document_url, OfficialRedirects, import_official_documents
+from modern.eis_public import validate_notice, official_search_url, lookup_notice, network_error_type
+from modern.eis_document_download import validate_document_url, OfficialRedirects, import_official_documents, document_source_label
 from modern import tender_store
-from modern.eis_resolver import is_notice_context, resolve_notice_pages
+from modern.eis_resolver import is_notice_context, resolve_notice_pages, official_https_url
 
 ROOT = 'https://zakupki.gov.ru'
 MAX_PAGE = 2 * 1024 * 1024
@@ -24,9 +24,9 @@ MAX_DOCS = 40
 MAX_DISCOVERY_SECONDS = 24
 
 
-def _is_notice_context(url: str, number: str) -> bool:
+def _is_notice_context(url: str, number: str, bound_urls=()) -> bool:
     """Only follow official notice/document pages referring to exact purchase number."""
-    return is_notice_context(url, number)
+    return is_notice_context(url, number, bound_urls)
 
 
 def _is_file_candidate(url: str, label: str) -> bool:
@@ -34,9 +34,12 @@ def _is_file_candidate(url: str, label: str) -> bool:
     p = urlsplit(url)
     path = p.path.lower()
     query = p.query.lower()
-    if any(path.endswith(ext) for ext in ('.doc', '.docx', '.pdf', '.xlsx', '.xls', '.xlsm', '.xml', '.odt', '.rtf', '.txt', '.zip')):
+    if any(path.endswith(ext) for ext in ('.doc', '.docx', '.pdf', '.xlsx', '.xls', '.xlsm', '.xml', '.odt', '.rtf', '.txt', '.zip', '.rar', '.7z')):
         return True
-    return any(key in path for key in ('/filestore/', '/download/', '/downloadfile', '/getfile', '/filedownload', '/file/download')) or ('download' in path and ('file' in path or 'document' in path))
+    return (any(key in path for key in ('/filestore/', '/download/', '/downloadfile', '/getfile', '/filedownload', '/file/download'))
+            or (path.endswith('/file.html') and 'uid' in parse_qs(p.query))
+            or path.endswith('/printform/viewxml.html')
+            or ('download' in path and ('file' in path or 'document' in path)))
 
 
 def extract_page_links(page: bytes, base_url: str, notice_number: str) -> tuple[list[dict], list[str]]:
@@ -44,21 +47,29 @@ def extract_page_links(page: bytes, base_url: str, notice_number: str) -> tuple[
     notice_number = validate_notice(notice_number)
     soup = BeautifulSoup(page, 'html.parser')
     links, next_pages = [], []
-    for a in soup.find_all('a', href=True):
-        href = (a.get('href') or '').strip()
+    for a in soup.select('a[href], [data-url], [data-href], [data-download-url]'):
+        href = (a.get('data-download-url') or a.get('data-url') or a.get('data-href') or a.get('href') or '').strip()
         if not href or href.startswith(('#', 'javascript:', 'data:')):
             continue
-        url = urljoin(base_url, href)
         try:
-            validate_document_url(url)
-        except ValueError:
+            url = official_https_url(href,base_url)
+        except (ValueError,TypeError):
             continue
         text = ' '.join(a.stripped_strings)[:160] or 'Документ ЕИС'
-        if _is_notice_context(url, notice_number) and 'documents' in urlsplit(url).path.lower():
+        if _is_notice_context(url, notice_number, bound_urls=(base_url,)) and 'documents' in urlsplit(url).path.lower():
             if url not in next_pages: next_pages.append(url)
-        if _is_file_candidate(url, text):
+        if _is_file_candidate(url, text) and not a.find_parent('footer'):
             links.append({'url': url, 'title': text, 'source_page': base_url})
     return links[:50], next_pages[:8]
+
+
+def notice_documents_url(source_url: str, number: str) -> str | None:
+    """Documented sibling tab of an already resolved, number-confirmed card."""
+    parsed = urlsplit(source_url)
+    if not _is_notice_context(source_url,number,bound_urls=(source_url,)) or not parsed.path.endswith('/common-info.html'):
+        return None
+    from urllib.parse import urlunsplit
+    return urlunsplit((parsed.scheme,parsed.netloc,parsed.path[:-len('common-info.html')]+'documents.html',parsed.query,''))
 
 
 def discover_public_documents(notice_number: str, *, opener=None, entry_urls=None) -> dict:
@@ -68,19 +79,20 @@ def discover_public_documents(notice_number: str, *, opener=None, entry_urls=Non
     or is the notice-specific documents page. Network errors are surfaced.
     """
     number = validate_notice(notice_number)
-    live_opener = opener is None
-    opener = opener or build_opener(OfficialRedirects())
+    from modern.eis_document_download import build_official_opener
+    opener = opener or build_official_opener()
     notice_path = ('/223/purchase/public/purchase/info/common-info.html' if len(number) == 11
                    else '/epz/order/notice/view/common-info.html')
     initial = entry_urls if entry_urls is not None else [ROOT + notice_path + '?' + urlencode({'regNumber':number})]
     started = monotonic()
     resolution_errors = []
-    if entry_urls is None and live_opener:
+    if entry_urls is None:
         resolved = resolve_notice_pages(number, opener=opener)
         resolution_errors = resolved['errors']
         if resolved['notice_urls']:
             initial = resolved['notice_urls']
     queue = list(initial)
+    bound_urls = tuple(initial)
     seen = set()
     found = {}
     errors = list(resolution_errors)
@@ -88,14 +100,14 @@ def discover_public_documents(notice_number: str, *, opener=None, entry_urls=Non
         url = queue.pop(0)
         if url in seen: continue
         seen.add(url)
-        if not _is_notice_context(url, number):
+        if not _is_notice_context(url, number, bound_urls):
             continue
         try:
             req = Request(url, headers={'User-Agent': 'Mozilla/5.0 QXDesktop/4.0',
                                         'Accept':'text/html, application/xhtml+xml', 'Accept-Encoding': 'identity'})
             with opener.open(req, timeout=max(.1, min(8, MAX_DISCOVERY_SECONDS - (monotonic() - started)))) as resp:
                 final = resp.geturl()
-                if not _is_notice_context(final, number):
+                if not _is_notice_context(final, number, bound_urls):
                     raise ValueError('ЕИС перенаправила на постороннюю страницу')
                 mime = str(resp.headers.get('Content-Type','')).lower()
                 if mime and not ('html' in mime):
@@ -109,12 +121,15 @@ def discover_public_documents(notice_number: str, *, opener=None, entry_urls=Non
             if not re.search(r'(?<!\d)' + re.escape(number) + r'(?!\d)', readable):
                 raise ValueError('Номер закупки не подтверждён на странице')
             links, next_pages = extract_page_links(payload, final, number)
+            sibling = notice_documents_url(final,number)
+            if sibling and not next_pages and sibling not in seen:
+                next_pages.append(sibling)
             for item in links:
                 if item['url'] not in found:
                     found[item['url']] = item
             queue.extend(x for x in next_pages if x not in seen and x not in queue)
         except (HTTPError, URLError, OSError, ValueError, TimeoutError) as exc:
-            errors.append(type(exc).__name__)
+            errors.append(network_error_type(exc))
     limit_reached = bool(queue) or len(found) > MAX_DOCS
     return {
         'notice_number': number, 'documents': list(found.values())[:MAX_DOCS],
@@ -148,10 +163,11 @@ def discover_and_import(tender_id: str, *, opener=None, discovered=None) -> dict
     if not urls:
         return {**details, 'imported':[], 'duplicates':[], 'warnings':[], 'failed_count':0, 'success_count':0,
                 'documents': tender_store.detail(tender_id)['documents']}
-    if len(urls) <= 10:
-        result = import_official_documents(tender_id, urls, opener=opener)
-    else:
-        result = import_official_documents(tender_id, urls, opener=opener, max_urls=MAX_DOCS)
+    with document_source_label('zakupki.gov.ru (автопоиск по номеру закупки)'):
+        if len(urls) <= 10:
+            result = import_official_documents(tender_id, urls, opener=opener)
+        else:
+            result = import_official_documents(tender_id, urls, opener=opener, max_urls=MAX_DOCS)
     result.update({'found':details.get('found',0), 'checked_pages':details.get('checked_pages',0),
                    'search_url': details.get('search_url'), 'source':'Автопоиск публичных документов ЕИС',
                    'discovery_errors': details.get('errors', []),

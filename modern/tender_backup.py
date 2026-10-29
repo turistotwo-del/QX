@@ -27,7 +27,7 @@ MAX_DB = 120 * 1024 * 1024
 MAX_FILE = 30 * 1024 * 1024
 MAX_TOTAL = 700 * 1024 * 1024
 MAX_MEMBERS = 10000
-DOC_RE = re.compile(r'^documents/([0-9a-f]{64})(\.(?:docx|pdf|xlsx|xlsm|txt|md|csv|xml|qxproj|doc|xls|rtf))$')
+DOC_RE = re.compile(r'^documents/([0-9a-f]{64})(\.(?:docx|pdf|xlsx|xlsm|txt|md|csv|xml|qxproj|doc|xls|rtf|rar|7z))$')
 REQUIRED_TABLES = {'tenders', 'tender_projects', 'tender_documents', 'tender_comments', 'organizations', 'tender_shipments', 'tender_events'}
 
 

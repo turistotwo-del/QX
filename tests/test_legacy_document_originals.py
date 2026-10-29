@@ -9,7 +9,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 os.environ.setdefault('QX_DATA_DIR',tempfile.mkdtemp(prefix='qx_legacy_boot_'))
 from modern import tender_store as store
-from modern.attachment_formats import OLE_SIGNATURE, validate_raw_document
+from modern.attachment_formats import OLE_SIGNATURE, RAR_SIGNATURES, SEVEN_Z_SIGNATURE, validate_raw_document
 from modern.attachment_integrity import audit_attachments
 from modern.eis_document_download import fetch_official_document, import_official_document
 from modern.tender_package import import_package
@@ -18,7 +18,10 @@ from modern.tender_analysis import analyze_documents
 
 FILES = {'ТЗ.doc':OLE_SIGNATURE + b'\0'*504 + b'DOC-original',
          'Смета.xls':OLE_SIGNATURE + b'\0'*504 + b'XLS-original',
-         'Контракт.rtf':b'{\\rtf1\\ansi Contract original}'}
+         'Контракт.rtf':b'{\\rtf1\\ansi Contract original}',
+         # Opaque original containers: no archive entry is interpreted by QX.
+         'Документация.rar':RAR_SIGNATURES[0] + b'\0'*24,
+         'Приложения.7z':SEVEN_Z_SIGNATURE + b'\0'*26}
 
 
 class Reply:
@@ -57,10 +60,10 @@ class LegacyOriginals(unittest.TestCase):
                 self.assertEqual(result['imported'],[name])
                 self.assertIn('автоматический анализ',result['warnings'][0]['reason'])
                 self.assertEqual(store.document_bytes(self.tid,result['document_id']),(name,data))
-        self.assertEqual(audit_attachments()['valid'],3)
+        self.assertEqual(audit_attachments()['valid'],len(FILES))
 
     def test_fake_legacy_payloads_rejected_before_storage(self):
-        for suffix in ('.doc','.xls','.rtf'):
+        for suffix in ('.doc','.xls','.rtf','.rar','.7z'):
             for data in (b'<html>login</html>',b'<!DOCTYPE html>captcha',b'MZ' + b'x'*600,b'junk'):
                 with self.subTest(suffix=suffix,data=data[:20]),self.assertRaises(ValueError):
                     import_official_document(self.tid,'https://zakupki.gov.ru/files/fake' + suffix,
@@ -72,17 +75,17 @@ class LegacyOriginals(unittest.TestCase):
         with ZipFile(payload,'w',compression=ZIP_DEFLATED) as archive:
             for name,data in FILES.items():archive.writestr('Приложения/' + name,data)
         result=import_package(self.tid,payload.getvalue())
-        self.assertEqual(len(result['imported']),3)
-        self.assertEqual(len(result['warnings']),3)
+        self.assertEqual(len(result['imported']),len(FILES))
+        self.assertEqual(len(result['warnings']),len(FILES))
         self.assertEqual(result['ignored'],[])
         backup=store.backup_archive()
-        self.assertEqual(preview_archive(backup)['documents'],3)
+        self.assertEqual(preview_archive(backup)['documents'],len(FILES))
         store.delete_tender(self.tid)
         self.assertEqual(list(store.DOCUMENTS.iterdir()),[])
         restore_archive(backup)
         for document in store.detail(self.tid)['documents']:
             self.assertEqual(store.document_bytes(self.tid,document['id'])[1],FILES[document['filename']])
-        self.assertEqual(audit_attachments()['valid'],3)
+        self.assertEqual(audit_attachments()['valid'],len(FILES))
         store.delete_tender(self.tid)
         self.assertEqual(list(store.DOCUMENTS.iterdir()),[])
 
@@ -97,7 +100,7 @@ class LegacyOriginals(unittest.TestCase):
 
     def test_raw_originals_do_not_produce_fake_analysis(self):
         result=analyze_documents(list(FILES.items()))
-        self.assertEqual(len(result['errors']),3)
+        self.assertEqual(len(result['errors']),len(FILES))
         self.assertTrue(all('автоматический анализ' in item['error'] for item in result['errors']))
 
     def test_api_upload_download_preserves_original(self):
@@ -118,6 +121,19 @@ class LegacyOriginals(unittest.TestCase):
         malformed=client.post(f'/api/tenders/{self.tid}/documents',content=b'<html>login</html>',
                               headers={'x-file-name':'fake.doc'})
         self.assertEqual(malformed.status_code,400)
+
+    def test_archive_originals_are_never_opened_or_extracted(self):
+        for name in ('Документация.rar','Приложения.7z'):
+            with self.subTest(name=name),patch('zipfile.ZipFile',side_effect=AssertionError('Archive must stay opaque')):
+                result=import_official_document(self.tid,'https://zakupki.gov.ru/files/document'+Path(name).suffix,
+                                                opener=Opener(name,FILES[name]))
+                self.assertEqual(store.document_bytes(self.tid,result['document_id'])[1],FILES[name])
+
+    def test_archive_headers_and_minimum_lengths(self):
+        validate_raw_document('rar5.rar',RAR_SIGNATURES[1]+b'\0'*20)
+        for name,data in [('short.rar',RAR_SIGNATURES[0]),('short.7z',SEVEN_Z_SIGNATURE),
+                          ('wrong.rar',FILES['Приложения.7z']),('wrong.7z',FILES['Документация.rar'])]:
+            with self.subTest(name=name),self.assertRaises(ValueError):validate_raw_document(name,data)
 
 
 if __name__=='__main__':unittest.main()

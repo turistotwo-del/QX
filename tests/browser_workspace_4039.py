@@ -28,6 +28,7 @@ NUMBER = '0322100002526000466'
 FILE_URL = 'https://zakupki.gov.ru/documents/workspace-specification.docx'
 CLIENT = TestClient(app)
 REQUESTS: list[dict] = []
+VALIDATION_POSTS = 0
 
 
 def word_document() -> bytes:
@@ -73,10 +74,11 @@ def embedded_app() -> str:
 def wait_import_finished(page, expected_requests):
     page.wait_for_function('!document.querySelector("[data-action=home-eis-import]")?.disabled', timeout=30000)
     page.wait_for_function('typeof state !== "undefined" && state.eisImportBusy === false', timeout=30000)
-    assert len([r for r in REQUESTS if r['path'] == '/api/eis/import']) == expected_requests
+    assert len([r for r in REQUESTS if r['path'] == '/api/eis/jobs' and r['method'] == 'POST']) - VALIDATION_POSTS == expected_requests
 
 
 def main():
+    global VALIDATION_POSTS
     from modern.eis_discovery import discover_and_import
     xml = (f'<epNotice><purchaseNumber>{NUMBER}</purchaseNumber>'
            '<purchaseName>Поставка рабочих станций</purchaseName>'
@@ -112,12 +114,15 @@ def main():
         number_input = page.locator('#home-eis-number')
         number_input.wait_for()
 
-        # Invalid numbers must never initiate a procurement import request.
+        # Invalid numbers are rejected locally without a draft or source request.
         number_input.fill('12345')
-        button = page.locator('[data-action="home-eis-import"]')
-        if button.is_enabled():
+        button = page.locator('.qx-purchase-form [data-action="home-eis-import"]')
+        with patch('modern.eis_sync.fetch_notice_metadata') as rejected_source:
             button.click()
-        assert not [r for r in REQUESTS if r['path'] == '/api/eis/import']
+            page.wait_for_function('state.eisImportBusy === false && Boolean(state.eisImportError)')
+            assert CLIENT.get('/api/tenders').json()['items'] == []
+            rejected_source.assert_not_called()
+        VALIDATION_POSTS = len([r for r in REQUESTS if r['path'] == '/api/eis/jobs' and r['method'] == 'POST'])
 
         with patch('modern.eis_sync.fetch_notice_metadata', return_value=metadata), \
              patch('modern.eis_sync.discover_and_import', side_effect=import_documents), \
@@ -185,15 +190,17 @@ def main():
                        'message': 'ЕИС временно недоступна: проверяемые данные не получены.'}
         page.locator('#home-eis-docs').uncheck()
         with patch('modern.eis_sync.fetch_notice_metadata', return_value=unavailable), \
-             patch('modern.eis_sync.fetch_notice_html_metadata', return_value=unavailable):
-            page.locator('[data-action="home-eis-import"]').click()
+             patch('modern.eis_sync.fetch_notice_html_metadata', return_value=unavailable), \
+             patch('modern.eis_sync.lookup_secondary', return_value={**unavailable, 'documents': [], 'found': 0, 'source_name': 'Вторичный тестовый источник'}):
+            page.locator('.qx-purchase-form [data-action="home-eis-import"]').click()
             page.wait_for_function('typeof state !== "undefined" && !state.eisImportBusy', timeout=30000)
             wait_import_finished(page, 3)
         card = CLIENT.get('/api/tenders/' + card_id).json()['tender']
         assert card['customer'] == 'Мой заказчик'
         assert len(card['documents']) == 1
         assert page.evaluate('state.eisImportResult.partial') is True
-        assert 'недоступна' in page.locator('.qx-import-feedback').inner_text()
+        assert page.evaluate('state.eisImportResult.metadata_available') is False
+        assert 'не предоставили проверяемые сведения' in page.locator('.qx-import-feedback.partial').inner_text()
 
         # The calculation tools form a native keyboard-operable disclosure group.
         group = page.locator('details').filter(has=page.locator('[data-action="tab"][data-tab="build"]')).first

@@ -29,6 +29,13 @@ def metadata(**values):
 
 class TestSync(unittest.TestCase):
     def setUp(self):
+        # These tests isolate the EIS adapter. Secondary-source behavior has its
+        # own fixtures; an offline EIS case must never request a live website.
+        secondary = patch('modern.eis_sync.lookup_secondary', return_value={
+            'available': False, 'notice': None, 'documents': [],
+            'source_name': 'Secondary fixture', 'message': 'Fixture unavailable'})
+        secondary.start()
+        self.addCleanup(secondary.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix='qx_eis_sync_')
         self.old = (store.APP_DATA, store.DB_FILE, store.DOCUMENTS, store._INITIALIZED)
         store.APP_DATA = Path(self.tmp.name)

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns2:purchaseNotice xmlns="http://zakupki.gov.ru/223fz/types/1" xmlns:ns2="http://zakupki.gov.ru/223fz/purchase/1">
+ <ns2:body><ns2:item><ns2:purchaseNoticeData>
+  <ns2:registrationNumber>32612345678</ns2:registrationNumber>
+  <ns2:name>Поставка оборудования: тестовая карточка</ns2:name>
+  <ns2:customer><mainInfo><fullName>Тестовый заказчик 223-ФЗ</fullName></mainInfo></ns2:customer>
+  <ns2:placer><mainInfo><fullName>Другой организатор</fullName></mainInfo></ns2:placer>
+  <ns2:attachments><totalDocumentsCount>2</totalDocumentsCount>
+   <document><fileName>Описание закупки.docx</fileName><url>http://zakupki.gov.ru/223/purchase/public/download/download.html?id=12345678</url></document>
+   <document><fileName>Недопустимый внешний файл.pdf</fileName><url>https://external.invalid/file.pdf</url></document>
+  </ns2:attachments>
+ </ns2:purchaseNoticeData></ns2:item></ns2:body>
+</ns2:purchaseNotice>

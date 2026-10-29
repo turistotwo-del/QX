@@ -125,7 +125,7 @@ class QXNativeBridge:
         'tender_backup': (('Резервная копия QX', '*.zip'), ('Все файлы', '*.*')),
         'tender_repair': (('Резервная копия для восстановления документов', '*.zip'), ('Все файлы', '*.*')),
         'tender_package': (('Пакет документов закупки ZIP', '*.zip'), ('Все файлы', '*.*')),
-        'tender': (('Документы закупки', '*.docx *.pdf *.xlsx *.xlsm *.txt *.csv *.md *.xml *.doc *.xls *.rtf'), ('Все файлы', '*.*')),
+        'tender': (('Документы закупки', '*.docx *.pdf *.xlsx *.xlsm *.txt *.csv *.md *.xml *.doc *.xls *.rtf *.rar *.7z'), ('Все файлы', '*.*')),
     }
     ALLOWED_EXTS = {
         'tz': {'.docx', '.pdf', '.xlsx', '.xlsm', '.odt', '.txt', '.csv', '.md'},
@@ -137,7 +137,7 @@ class QXNativeBridge:
         'tender_backup': {'.zip'},
         'tender_repair': {'.zip'},
         'tender_package': {'.zip'},
-        'tender': {'.docx','.pdf','.xlsx','.xlsm','.txt','.md','.csv','.xml','.doc','.xls','.rtf'},
+        'tender': {'.docx','.pdf','.xlsx','.xlsm','.txt','.md','.csv','.xml','.doc','.xls','.rtf','.rar','.7z'},
     }
 
     def choose_file(self, kind: str) -> dict:
