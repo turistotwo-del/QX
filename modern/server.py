@@ -173,7 +173,10 @@ async def parse(request: Request):
     char=[]
     if filename.lower().endswith('.docx'):
         char=await run_in_threadpool(extract_characteristics_docx,data)
-    return {'reqs':[asdict(r) for r in reqs], 'source_text':text,
+    from modern.tz_complexity import assess_complexity
+    parsed_reqs = [asdict(r) for r in reqs]
+    complexity = await run_in_threadpool(assess_complexity, text, parsed_reqs, char)
+    return {'reqs':parsed_reqs, 'source_text':text, 'complexity':complexity,
             'source_filename':filename, 'source_docx_base64':base64.b64encode(data).decode('ascii') if filename.lower().endswith('.docx') else '',
             'characteristics':char}
 
@@ -273,6 +276,23 @@ async def save_prices(request: Request):
     storage.save_prices(prices)
     return {'prices':prices}
 
+def fill_project_complexity(payload):
+    """Older saved projects gain the estimate without changing their requirements."""
+    from modern.tz_complexity import assess_complexity
+    reqs = payload.get('reqs') or []
+    for doc in payload.get('tz_documents') or []:
+        if not isinstance(doc, dict):
+            continue
+        assessment = doc.get('complexity')
+        if not isinstance(assessment, dict) or assessment.get('version') != 2 or assessment.get('scope') != 'technical':
+            rows = [r for r in reqs if isinstance(r, dict) and r.get('_qx_doc_id') == doc.get('id')]
+            doc['complexity'] = assess_complexity(doc.get('text') or '', rows, doc.get('characteristics'))
+    if not payload.get('tz_documents') and payload.get('source_filename'):
+        payload['source_complexity'] = assess_complexity(payload.get('source_text') or '', reqs,
+                                                         payload.get('tender_characteristics'))
+    return payload
+
+
 def project_dump(body):
     return dump_project(reqs=body.get('reqs'), plans=body.get('plans'),source_text=body.get('source_text',''),
         qx_prices=body.get('prices'),project_meta={'name':body.get('name','Новый проект'),'tender_project_key':body.get('tender_project_key',''),'tender_link_enabled':bool(body.get('tender_link_enabled')),'tender_notice_number':body.get('tender_notice_number','')},
@@ -296,7 +316,7 @@ async def open_project(request: Request):
     # Old projects may predate the QX Key E adapter price. Fill missing keys
     # while retaining the user's historical prices and component selections.
     payload['qx_prices'] = storage.normalize_prices(payload.get('qx_prices'))
-    return payload
+    return fill_project_complexity(payload)
 
 @app.post('/api/project/autosave')
 async def save_auto(request: Request):
@@ -310,7 +330,7 @@ def load_auto():
     data=autosave.load_autosave()
     if not data: return {'found':False}
     payload=load_project(data);payload.pop('source_docx_bytes',None)
-    return {'found':True,'project':payload}
+    return {'found':True,'project':fill_project_complexity(payload)}
 
 @app.post('/api/export/excel')
 async def excel(request: Request):

@@ -42,6 +42,8 @@ with sync_playwright() as p:
     page.expose_function('QXTESTAPI',qxapi)
     page.set_content(html,wait_until='domcontentloaded')
     page.wait_for_selector('.sidebar')
+    if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+        page.locator('#tender-nav-toggle').click()
     page.locator('.sidebar [data-action="tender-nav"][data-view="registry"]').click()
     page.wait_for_selector('[data-tender-row]')
     assert page.locator('text=Испорченные данные').count()>0

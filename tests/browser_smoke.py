@@ -68,6 +68,8 @@ def test_browser():
         page.wait_for_selector('.loaded-source',timeout=12000)
         page.locator('[data-action="select"]').first.click()
         page.wait_for_selector('.price-table',timeout=12000)
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('[data-action="tender-nav"][data-view="registry"]').click()
         page.wait_for_selector('[data-tender-row]',timeout=12000)
         page.locator('[data-tender-search]').fill('no-such-purchase')
@@ -128,10 +130,13 @@ def test_browser():
         page.locator('[data-org-editor] [data-org-name]').fill('ООО Тест QX обновлено')
         page.locator('[data-action="tender-org-save"]').click()
         page.wait_for_selector('[data-org-name][value="ООО Тест QX обновлено"]')
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('[data-action="tender-nav"][data-view="registry"]').click()
         page.wait_for_selector('[data-tender-row]')
         assert page.locator('.sidebar .tender-group').count()==1
-        assert page.locator('.sidebar .tender-subnav').count()==6
+        assert page.locator('.sidebar .tender-subnav').count()==5
+        assert page.locator('.sidebar .qx-calendar-nav').count()==1
         # Both themes must retain tender navigation and readable tables.
         page.evaluate("state.theme='dark';render()")
         assert not page.locator('html').evaluate('(el)=>el.classList.contains("light")')

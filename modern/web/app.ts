@@ -11,7 +11,7 @@ const notesState = { items: [], selected: '', query: '', showDone: false, error:
 const noteSaveTimers = new Map();
 const noteSaveChains = new Map();
 const titles = { notes: 'Быстрые заметки', home: 'Главная', tz: 'Загрузка и разбор ТЗ', build: 'Сборка и цены', verify: 'Проверка заявки', arsenal: 'Арсенал', docs: 'Документы и экспорт', catalog: 'Каталоги оборудования', prices: 'Цены QX', settings: 'Настройки', tenders: 'Тендерный отдел' };
-const tenderNav = [['registry', '▤', 'Реестр закупок'], ['calendar', '▦', 'Календарь и задачи'], ['contracts', '▣', 'Контракты и поставки'], ['analytics', '◫', 'Аналитика'], ['reminders', '◷', 'Сроки и напоминания'], ['organizations', '◇', 'Организации']];
+const tenderNav = [['registry', '▤', 'Реестр закупок'], ['contracts', '▣', 'Контракты и поставки'], ['analytics', '◫', 'Аналитика'], ['reminders', '◷', 'Сроки и напоминания'], ['organizations', '◇', 'Организации']];
 const tenderViewTitles = { registry: 'Реестр закупок', calendar: 'Календарь и задачи', contracts: 'Контракты и поставки', analytics: 'Аналитика', reminders: 'Сроки и напоминания', organizations: 'Организации' };
 const nav1 = [['home', '⌂', 'Главная'], ['tz', '↥', 'Загрузка ТЗ'], ['build', '▦', 'Сборка и цены'], ['verify', '✓', 'Проверка заявки'], ['arsenal', '▤', 'Арсенал'], ['docs', '↗', 'Документы'], ['notes', '✎', 'Быстрые заметки']];
 const nav2 = [['catalog', '◇', 'Базы оборудования'], ['prices', '₽', 'Прайс QX'], ['settings', '⚙', 'Настройки']];
@@ -119,7 +119,15 @@ function goto(tab) { if (tab === 'notes')
     refreshChar(); }
 function navBtn([tab, icon, title]) { return `<button class="nav ${state.tab === tab ? 'active' : ''}" data-action="tab" data-tab="${tab}" title="${title}"><span class="ico">${icon}</span><span class="nav-text">${title}</span></button>`; }
 function tenderNavBtn([view, icon, title]) { return `<button class="nav tender-subnav ${state.tab === 'tenders' && state.tenders.view === view && !state.tenders.selected ? 'active' : ''}" data-action="tender-nav" data-view="${view}" title="${title}"><span class="ico">${icon}</span><span class="nav-text">${title}</span></button>`; }
-function tenderSidebar() { const opened = state.tenders.expanded; return `<div class="sidebar-tenders"><button class="tender-group ${state.tab === 'tenders' ? 'active' : ''}" data-action="tender-group" title="Тендерный отдел"><span class="group-icon">▥</span><span class="nav-text">ТЕНДЕРНЫЙ ОТДЕЛ</span><span class="tender-chevron">${opened ? '⌄' : '›'}</span></button><div class="tender-submenu ${opened ? 'expanded' : ''}">${tenderNav.map(tenderNavBtn).join('')}</div></div>`; }
+function tenderSidebar() {
+    const opened = !!state.tenders.expanded;
+    const active = state.tab === 'tenders' && (state.tenders.view !== 'calendar' || !!state.tenders.selected);
+    return `<div class="sidebar-tenders"><button class="tender-group ${active ? 'active' : ''}" id="tender-nav-toggle" data-action="tender-group" title="ТЕНДЕРНЫЙ ОТДЕЛ" aria-label="ТЕНДЕРНЫЙ ОТДЕЛ" aria-expanded="${opened}" aria-controls="tender-nav-submenu"><span class="group-icon" aria-hidden="true">▥</span><span class="nav-text">ТЕНДЕРНЫЙ ОТДЕЛ</span><span class="tender-chevron" aria-hidden="true">${opened ? '⌄' : '›'}</span></button><div id="tender-nav-submenu" class="tender-submenu ${opened ? 'expanded' : ''}" ${opened ? '' : 'hidden'}>${tenderNav.map(tenderNavBtn).join('')}</div></div>`;
+}
+function calendarSidebar() {
+    const active = state.tab === 'tenders' && state.tenders.view === 'calendar' && !state.tenders.selected;
+    return `<button class="nav qx-calendar-nav ${active ? 'active' : ''}" data-action="tender-nav" data-view="calendar" title="Календарь" aria-label="Календарь" ${active ? 'aria-current="page"' : ''}><span class="ico" aria-hidden="true">▦</span><span class="nav-text">Календарь</span></button>`;
+}
 function headerActions() { if (state.tab === 'notes')
     return `<button class="top-btn new-project" data-action="notes-new">＋ Новая заметка</button><div class="avatar">QX</div>`; return state.tab === 'tenders' ? `<button class="top-btn" data-action="tender-backup">⇩ Копия базы</button><button class="top-btn new-project" data-action="tender-new">＋ Новая закупка</button><div class="avatar">QX</div>` : `<button class="top-btn new-project" data-action="new">＋ Новый расчёт</button><button class="top-btn" data-action="project-save">⇩ Сохранить</button><button class="top-btn" data-action="project-load">▣ Открыть</button><div class="avatar">QX</div>`; }
 function workspaceSidebar() {
@@ -133,7 +141,7 @@ function workspaceSidebar() {
     if (tabs.includes(state.tab) && state.workspaceLastTab !== state.tab) opened = true;
     state.workspaceLastTab = state.tab;
     state.workspaceExpanded = opened;
-    return `<details class="qx-workspace-group ${tabs.includes(state.tab) ? 'is-active' : ''}" id="workspace-nav-group" ${opened ? 'open' : ''}><summary title="Расчёт и документы" aria-label="Расчёт и документы"><span class="ico" aria-hidden="true">▦</span><span class="nav-text">Расчёт и документы</span><span class="qx-workspace-chevron" aria-hidden="true">›</span></summary><div class="qx-workspace-submenu">${nav1.filter(([tab]) => tabs.includes(tab)).map(navBtn).join('')}</div></details>`;
+    return `<details class="qx-workspace-group ${tabs.includes(state.tab) ? 'is-active' : ''}" id="workspace-nav-group" ${opened ? 'open' : ''}><summary title="РАСЧЁТ И ДОКУМЕНТЫ" aria-label="РАСЧЁТ И ДОКУМЕНТЫ"><span class="ico" aria-hidden="true">▦</span><span class="nav-text">РАСЧЁТ И ДОКУМЕНТЫ</span><span class="qx-workspace-chevron" aria-hidden="true">›</span></summary><div class="qx-workspace-submenu">${nav1.filter(([tab]) => tabs.includes(tab)).map(navBtn).join('')}</div></details>`;
 }
 document.addEventListener('toggle', event => {
     if (event.target.id !== 'workspace-nav-group') return;
@@ -158,7 +166,7 @@ function dashboardDates() {
     }
     return events.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
 }
-function shell() { return `<div class="app-shell ${state.collapse ? 'collapsed' : ''}" style="--sidebar-current-width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><aside class="sidebar" style="width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><div class="brand"><div class="brand-logo">QX</div><div class="brand-text"><strong>QX <em>Подборщик</em></strong><small>${esc(state.runtimeVersion || 'QX WORKSPACE')}</small></div></div><div class="sidebar-menu"><div class="side-caption">РАБОЧАЯ ОБЛАСТЬ</div>${nav1.filter(([tab]) => tab === 'home').map(navBtn).join('')}${workspaceSidebar()}${tenderSidebar()}${nav1.filter(([tab]) => tab === 'notes').map(navBtn).join('')}<div class="side-caption">СПРАВОЧНИКИ</div>${nav2.map(navBtn).join('')}</div><div class="sidebar-bottom"><span class="fx">USD · ЦБ РФ ${state.rate.live ? '● актуальный' : '○ сохранённый'}</span><b>${fmt(state.rate.rate, 2)} ₽</b><small>Для расчёта: ${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</small><div class="toolbar"><button data-action="rate" class="btn secondary small mini-btn">↻ Курс</button><button data-action="dns" class="btn secondary small mini-btn">DNS ↗</button></div></div><button class="sidebar-collapse" data-action="collapse">${state.collapse ? '›' : '‹'}</button></aside><div class="main"><header class="topbar"><div class="crumbs">Рабочая область QX <span>›</span> <strong>${state.tab === 'tenders' ? 'Тендеры · ' + (state.tenders.selected ? 'Карточка закупки' : tenderViewTitles[state.tenders.view]) : titles[state.tab]}</strong></div><div class="top-right"><div class="top-rate">Расчётный USD <strong>${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</strong></div><span class="pill">● Локально</span>${headerActions()}</div></header><main class="content" id="content"><div class="page">${pageContent()}</div></main></div></div>${state.modal ? modal() : ''}`; }
+function shell() { return `<div class="app-shell ${state.collapse ? 'collapsed' : ''}" style="--sidebar-current-width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><aside class="sidebar" style="width:${state.collapse ? 72 : Math.max(260, Math.min(460, num(state.settings.sidebar_width, 320)))}px"><div class="brand"><div class="brand-logo">QX</div><div class="brand-text"><strong>QX <em>Подборщик</em></strong><small>${esc(state.runtimeVersion || 'QX WORKSPACE')}</small></div></div><div class="sidebar-menu"><div class="side-caption">РАБОЧАЯ ОБЛАСТЬ</div>${nav1.filter(([tab]) => tab === 'home').map(navBtn).join('')}${workspaceSidebar()}${tenderSidebar()}${calendarSidebar()}${nav1.filter(([tab]) => tab === 'notes').map(navBtn).join('')}<div class="side-caption">СПРАВОЧНИКИ</div>${nav2.map(navBtn).join('')}</div><div class="sidebar-bottom"><span class="fx">USD · ЦБ РФ ${state.rate.live ? '● актуальный' : '○ сохранённый'}</span><b>${fmt(state.rate.rate, 2)} ₽</b><small>Для расчёта: ${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</small><div class="toolbar"><button data-action="rate" class="btn secondary small mini-btn">↻ Курс</button><button data-action="dns" class="btn secondary small mini-btn">DNS ↗</button></div></div><button class="sidebar-collapse" data-action="collapse">${state.collapse ? '›' : '‹'}</button></aside><div class="main"><header class="topbar"><div class="crumbs">Рабочая область QX <span>›</span> <strong>${state.tab === 'tenders' ? state.tenders.view === 'calendar' && !state.tenders.selected ? 'Календарь' : 'Тендеры · ' + (state.tenders.selected ? 'Карточка закупки' : tenderViewTitles[state.tenders.view]) : titles[state.tab]}</strong></div><div class="top-right"><div class="top-rate">Расчётный USD <strong>${fmt(num(state.rate.rate) + num(state.settings.usd_buffer_rub, 5), 2)} ₽</strong></div><span class="pill">● Локально</span>${headerActions()}</div></header><main class="content" id="content"><div class="page">${pageContent()}</div></main></div></div>${state.modal ? modal() : ''}`; }
 function noteDate(v) { try {
     return new Date(v).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
@@ -494,9 +502,32 @@ function tzAiPanel() {
  <div class="table-wrap"><table class="table"><thead><tr><th>Применить</th><th>Характеристика</th><th>Сейчас</th><th>Предложение AI</th><th>Цитата из ТЗ</th></tr></thead><tbody>${proposals.map((p, i) => `<tr><td><input type="checkbox" data-tz-ai-check="${i}" checked></td><td>${esc(reqLabels[p.field] || p.field)}</td><td>${esc(String(p.previous ?? 'Не распознано'))}</td><td><b>${esc(String(p.value))}</b></td><td><small>${esc(p.quote)}</small></td></tr>`).join('') || '<tr><td colspan="5">Исправления с проверяемыми цитатами не предложены. Это не гарантирует полноту распознавания.</td></tr>'}</tbody></table></div>
  ${proposals.length ? `<button class="btn primary" data-action="tz-ai-apply" style="margin-top:12px">Применить отмеченные и пересчитать</button>` : ''}` : ''}</div>`;
 }
+const complexityLevels = { simple: 'Простое', medium: 'Среднее', complex: 'Сложное', unknown: 'Недостаточно данных' };
+function complexityForDoc(doc) {
+    const value = doc?.complexity;
+    return value && Object.prototype.hasOwnProperty.call(complexityLevels, value.level) ? value : { level: 'unknown', reasons: ['Оценка недоступна. Откройте сохранённый проект заново или загрузите исходное ТЗ.'] };
+}
+function tzComplexityBadge(doc) {
+    const result = complexityForDoc(doc);
+    return `<span class="qx-complexity-badge level-${result.level}" data-tz-complexity-badge data-level="${result.level}" data-doc-id="${esc(doc.id)}" aria-label="Сложность ТЗ: ${complexityLevels[result.level]}">${complexityLevels[result.level]}</span>`;
+}
+function tzComplexityPanel() {
+    const doc = activeDocForPosition();
+    if (!doc) return '';
+    const result = complexityForDoc(doc);
+    const reasons = Array.isArray(result.reasons) ? result.reasons.filter(item => typeof item === 'string').slice(0, 10) : [];
+    return `<section class="panel qx-tz-complexity level-${result.level}" data-tz-complexity data-level="${result.level}" data-doc-id="${esc(doc.id)}" aria-label="Оценка сложности технического задания"><div class="qx-tz-complexity-heading"><div><span class="eyebrow">ОЦЕНКА ТЕХНИЧЕСКОЙ ЧАСТИ</span><h2>Сложность технической части ТЗ</h2><small>${esc(doc.name)}</small></div>${tzComplexityBadge(doc)}</div><ul class="qx-tz-complexity-reasons">${reasons.map(reason => `<li>${esc(reason)}</li>`).join('')}</ul><p class="qx-tz-complexity-note">${esc(result.disclaimer || 'Ориентировочная оценка трудоёмкости по распознанным требованиям. Проверьте исходное ТЗ.')}</p></section>`;
+}
+function tzAdditionalRequirements() {
+    const doc = activeDocForPosition();
+    if (!doc) return '';
+    const assessment = complexityForDoc(doc);
+    const conditions = Array.isArray(assessment.additional_requirements) ? assessment.additional_requirements : [];
+    return `<section class="panel qx-tz-additional" data-tz-additional data-doc-id="${esc(doc.id)}"><div class="section-title"><h2>Дополнительные требования ТЗ</h2><span class="badge-count">${conditions.length}</span></div><p class="subtitle">Реестры, сертификаты и другие условия показаны отдельно. Они не повышают сложность технической части.</p>${conditions.length ? `<ul class="qx-tz-condition-list">${conditions.map(condition => `<li data-tz-condition="${esc(condition.key)}"><strong>${esc(condition.label)}</strong>${Array.isArray(condition.evidence) && typeof condition.evidence[0] === 'string' ? `<small>Из ТЗ: «${esc(condition.evidence[0])}»</small>` : ''}</li>`).join('')}</ul>` : '<p class="qx-tz-condition-empty">Отдельные условия в распознанном тексте не выделены. Проверьте исходный документ.</p>'}</section>`;
+}
 function tzDocumentList() {
     return (state.tzDocuments || []).length ? `<div class="panel"><div class="section-title"><h2>Загруженные ТЗ</h2><span class="badge-count">${state.tzDocuments.length}/12 документов</span></div>
- ${state.tzDocuments.map((d, i) => `<div class="activity-item"><span class="activity-icon">${i + 1}</span><div><strong>${esc(d.name)}</strong><small>${state.reqs.filter(r => r._qx_doc_id === d.id).length} позиций</small></div><button class="btn secondary small" data-action="tz-doc-view" data-id="${esc(d.id)}">Открыть</button><button class="btn secondary small" data-action="tz-doc-remove" data-id="${esc(d.id)}">Убрать</button></div>`).join('')}
+ ${state.tzDocuments.map((d, i) => `<div class="activity-item"><span class="activity-icon">${i + 1}</span><div><strong>${esc(d.name)}</strong><small>${state.reqs.filter(r => r._qx_doc_id === d.id).length} позиций</small><div class="qx-doc-complexity">${tzComplexityBadge(d)}</div></div><button class="btn secondary small" data-action="tz-doc-view" data-id="${esc(d.id)}">Открыть</button><button class="btn secondary small" data-action="tz-doc-remove" data-id="${esc(d.id)}">Убрать</button></div>`).join('')}
  <p class="subtitle">Дополнительные файлы добавляются к текущему расчёту. Исходные документы и привязки сохраняются в .qxproj. Для отдельного расчёта используйте «Новый расчёт».</p></div>` : '';
 }
 function tenderLinkPanel() {
@@ -512,7 +543,7 @@ function tenderLinkPanel() {
     ` : ''}
   </div>`;
 }
-function tz() { return `${pageHead('Техническое задание', 'Разбор Word/PDF, проверка распознавания и редактирование характеристик.', `<button class="btn secondary" data-action="new-position">＋ Позиция</button><button class="btn primary" data-action="upload">↥ Загрузить ТЗ</button>`)}<div class="grid"><div class="col-12">${state.source_filename ? `<div class="loaded-source"><span>📄</span><div><strong>Загруженный документ: ${esc(state.source_filename)}</strong><small>${state.characteristics.length} строк характеристик · ${currentDocCalculation().reqs.length} ${currentDocCalculation().reqs.length % 10 === 1 && state.reqs.length % 100 !== 11 ? 'позиция' : state.reqs.length % 10 >= 2 && state.reqs.length % 10 <= 4 && (state.reqs.length % 100 < 12 || state.reqs.length % 100 > 14) ? 'позиции' : 'позиций'} · исходный файл хранится в проекте${state.source_docx_base64 ? ' для заполнения заявки' : ''}</small></div><button class="btn secondary small" data-action="view-source">Просмотреть ТЗ</button></div>` : ''}<div class="drop-area" id="drop" data-action="upload"><div class="drop-icon">↥</div><strong>Перетащите несколько файлов ТЗ сюда</strong><p>DOCX, PDF, Excel, ODT, TXT, CSV, MD · можно выбрать сразу несколько и добавлять позже</p><button class="btn primary" data-action="upload">＋ Добавить файлы ТЗ</button></div>${tenderLinkPanel()}${tzDocumentList()}</div>${tzAiPanel()}${state.reqs.length ? `<div class="col-12 panel"><div class="section-title"><h2>Позиции технического задания</h2><button class="btn primary small" data-action="select">⚡ Подобрать комплектующие</button></div>${posChips()}<div class="flex between wrap" style="margin-bottom:18px"><div class="field" style="flex:1"><label>Имя проекта</label><input data-field="name" value="${esc(state.name)}"></div><div class="field"><label>Поиск характеристики</label><input data-field="reqSearch" placeholder="Например: USB, кэш, DDR5" value="${esc(state.reqSearch)}"></div></div><div class="toolbar" style="justify-content:flex-end;margin:12px 0"><button class="btn secondary small" data-action="toggle-all-fields">${state.showAllFields ? 'Скрыть пустые характеристики' : 'Показать все 224 характеристики'}</button></div>${num(currentReq()?.quantity) <= 0 ? '<div class="warning quantity-warning" style="margin-top:18px">⚠ Количество товара не найдено в ТЗ. Укажите его вручную, иначе стоимость партии будет нулевой и коммерческое предложение не сформируется.</div>' : ''}${requirements()}<div class="separator"></div><button class="btn primary" data-action="select">⚡ Пересчитать по ТЗ</button></div>` : `<div class="col-12 panel">${empty('ТЗ ещё не загружено', 'Можно загрузить Word с несколькими позициями или создать пустую позицию вручную.')}</div>`}</div>`; }
+function tz() { return `${pageHead('Техническое задание', 'Разбор Word/PDF, проверка распознавания и редактирование характеристик.', `<button class="btn secondary" data-action="new-position">＋ Позиция</button><button class="btn primary" data-action="upload">↥ Загрузить ТЗ</button>`)}<div class="grid"><div class="col-12">${state.source_filename ? `<div class="loaded-source"><span>📄</span><div><strong>Загруженный документ: ${esc(state.source_filename)}</strong><small>${state.characteristics.length} строк характеристик · ${currentDocCalculation().reqs.length} ${currentDocCalculation().reqs.length % 10 === 1 && state.reqs.length % 100 !== 11 ? 'позиция' : state.reqs.length % 10 >= 2 && state.reqs.length % 10 <= 4 && (state.reqs.length % 100 < 12 || state.reqs.length % 100 > 14) ? 'позиции' : 'позиций'} · исходный файл хранится в проекте${state.source_docx_base64 ? ' для заполнения заявки' : ''}</small></div><button class="btn secondary small" data-action="view-source">Просмотреть ТЗ</button></div>` : ''}${tzComplexityPanel()}${tzAdditionalRequirements()}<div class="drop-area" id="drop" data-action="upload"><div class="drop-icon">↥</div><strong>Перетащите несколько файлов ТЗ сюда</strong><p>DOCX, PDF, Excel, ODT, TXT, CSV, MD · можно выбрать сразу несколько и добавлять позже</p><button class="btn primary" data-action="upload">＋ Добавить файлы ТЗ</button></div>${tenderLinkPanel()}${tzDocumentList()}</div>${tzAiPanel()}${state.reqs.length ? `<div class="col-12 panel"><div class="section-title"><h2>Позиции технического задания</h2><button class="btn primary small" data-action="select">⚡ Подобрать комплектующие</button></div>${posChips()}<div class="flex between wrap" style="margin-bottom:18px"><div class="field" style="flex:1"><label>Имя проекта</label><input data-field="name" value="${esc(state.name)}"></div><div class="field"><label>Поиск характеристики</label><input data-field="reqSearch" placeholder="Например: USB, кэш, DDR5" value="${esc(state.reqSearch)}"></div></div><div class="toolbar" style="justify-content:flex-end;margin:12px 0"><button class="btn secondary small" data-action="toggle-all-fields">${state.showAllFields ? 'Скрыть пустые характеристики' : 'Показать все 224 характеристики'}</button></div>${num(currentReq()?.quantity) <= 0 ? '<div class="warning quantity-warning" style="margin-top:18px">⚠ Количество товара не найдено в ТЗ. Укажите его вручную, иначе стоимость партии будет нулевой и коммерческое предложение не сформируется.</div>' : ''}${requirements()}<div class="separator"></div><button class="btn primary" data-action="select">⚡ Пересчитать по ТЗ</button></div>` : `<div class="col-12 panel">${empty('ТЗ ещё не загружено', 'Можно загрузить Word с несколькими позициями или создать пустую позицию вручную.')}</div>`}</div>`; }
 function options(items, selected) { return items.map(x => `<option value="${esc(x.val)}" ${String(selected ?? '') === x.val ? 'selected' : ''}>${esc(x.label)}</option>`).join(''); }
 function reqField(key, r) {
     const value = r[key] === undefined ? state.reqDefaults[key] : r[key];
@@ -973,7 +1004,7 @@ async function uploadTzFiles(files, targetTenderId = '') {
         const firstNew = state.reqs.length;
         for (const { file, result } of parsed) {
             const id = 'tz-' + (globalThis.crypto?.randomUUID?.() || Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
-            state.tzDocuments.push({ id, name: file.name, text: result.source_text || '', docx: result.source_docx_base64 || '', characteristics: result.characteristics || [], overrides: {}, byteSize: file.size });
+            state.tzDocuments.push({ id, name: file.name, text: result.source_text || '', docx: result.source_docx_base64 || '', characteristics: result.characteristics || [], complexity: result.complexity || null, overrides: {}, byteSize: file.size });
             for (const r of result.reqs || []) {
                 state.reqs.push({ ...r, _qx_doc_id: id });
             }
@@ -1246,7 +1277,7 @@ function importProject(project) {
     state.tzDocuments = Array.isArray(project.tz_documents) ? project.tz_documents : [];
     if (!state.tzDocuments.length && state.source_filename) {
         const id = 'legacy-source';
-        state.tzDocuments = [{ id, name: state.source_filename, text: state.source_text, docx: state.source_docx_base64, characteristics: state.characteristics, overrides: state.overrides, byteSize: 0 }];
+        state.tzDocuments = [{ id, name: state.source_filename, text: state.source_text, docx: state.source_docx_base64, characteristics: state.characteristics, complexity: project.source_complexity || null, overrides: state.overrides, byteSize: 0 }];
         state.reqs.forEach(r => { if (!r._qx_doc_id)
             r._qx_doc_id = id; });
     }
@@ -1576,12 +1607,9 @@ async function handleAction(el) {
         }
     }
     if (a === 'tender-group') {
-        if (state.tab !== 'tenders')
-            gotoTender('registry');
-        else {
-            state.tenders.expanded = !state.tenders.expanded;
-            render();
-        }
+        state.tenders.expanded = !state.tenders.expanded;
+        render();
+        $('#tender-nav-toggle')?.focus({ preventScroll: true });
         return;
     }
     if (a === 'tender-nav') {
@@ -2095,8 +2123,8 @@ async function init() {
     }
 }
 /* QX Tender workspace. All financial values come from local data, not examples. */
-state.tenders = { items: [], organizations: [], summary: {}, statuses: [], selected: null, current: null, deleteCandidate: null, analysis: null, detailTab: 'overview', filter: '', statusFilter: '', orgFilter: '', view: 'registry', expanded: true };
-function gotoTender(view) { state.tab = 'tenders'; state.tenders.view = tenderViewTitles[view] ? view : 'registry'; state.tenders.selected = null; state.tenders.current = null; state.tenders.analysis = null; state.tenders.expanded = true; render(true); loadTenders(); }
+state.tenders = { items: [], organizations: [], summary: {}, statuses: [], selected: null, current: null, deleteCandidate: null, analysis: null, detailTab: 'overview', filter: '', statusFilter: '', orgFilter: '', view: 'registry', expanded: false };
+function gotoTender(view) { state.tab = 'tenders'; state.tenders.view = tenderViewTitles[view] ? view : 'registry'; state.tenders.selected = null; state.tenders.current = null; state.tenders.analysis = null; render(true); loadTenders(); }
 state.tenderProjectKey = (globalThis.crypto?.randomUUID?.() || 'qx-' + Date.now() + '-' + Math.random().toString(36).slice(2));
 state.tenderId = '';
 state.tenders.calendar = false;
@@ -2471,7 +2499,6 @@ async function handleTenderAction(el) {
         }
         if (act === 'tender-open') {
             state.tab = 'tenders';
-            state.tenders.expanded = true;
             await openTender(el.dataset.id);
             return;
         }

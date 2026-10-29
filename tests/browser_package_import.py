@@ -48,6 +48,8 @@ def test_import_ui():
         page.expose_function('QXTESTAPI',api_call)
         page.set_content(html,wait_until='domcontentloaded')
         page.wait_for_selector('.sidebar')
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('.sidebar [data-action="tender-nav"][data-view="registry"]').click()
         page.wait_for_selector('[data-action="tender-new"]')
         page.locator('[data-action="tender-new"]').last.click()

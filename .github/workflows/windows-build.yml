@@ -30,7 +30,7 @@ jobs:
           # handles from accumulating in a long-lived test harness process.
           # GNU timeout enforces the bound even if Python hangs while spawning.
           for scenario in \
-            browser_eis_jobs_4040.py browser_workspace_4039.py browser_selective_repair.py browser_smoke.py browser_ai_offline.py \
+            browser_tz_complexity_4041.py browser_eis_jobs_4040.py browser_workspace_4039.py browser_selective_repair.py browser_smoke.py browser_ai_offline.py \
             browser_gguf_status.py browser_eis_lookup.py browser_eis_document_url.py browser_eis_bulk.py browser_package_import.py \
             browser_restore.py browser_diagnostics.py browser_legacy_import.py; do
             timeout -k 5s 75s python tests/run_browser_suite.py --only "$scenario" --timeout 60

@@ -57,6 +57,8 @@ def test_browser():
         page.on('pageerror',lambda exc:problems.append(str(exc)))
         page.expose_function('QXTESTAPI',bridge)
         page.set_content(html,wait_until='domcontentloaded')
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('.sidebar [data-action="tender-nav"][data-view="registry"]').click()
         page.locator('[data-action="tender-open"]').first.click()
         page.locator('[data-action="tender-detail-tab"][data-view="docs"]').click()

@@ -43,6 +43,8 @@ def run():
         page.expose_function('QXAPI',api_forward)
         page.set_content(html,wait_until='domcontentloaded')
         page.wait_for_selector('.sidebar',timeout=12000)
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('[data-action="tender-nav"][data-view="registry"]').click()
         page.wait_for_function('document.querySelectorAll("[data-tender-row]").length===2',timeout=15000)
         # Step 1: cancel leaves the tender untouched.
@@ -68,6 +70,8 @@ def run():
         assert store.get(card2['id']) is None
         # Refresh should not resurrect deleted data.
         page.reload() if False else None
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('[data-action="tender-nav"][data-view="registry"]').click()
         page.wait_for_selector('h1:has-text("Реестр закупок")')
         assert page.locator('[data-tender-row]').count()==0

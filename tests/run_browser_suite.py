@@ -19,6 +19,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = (
+    'browser_tz_complexity_4041.py',
     'browser_eis_jobs_4040.py',
     'browser_workspace_4039.py',
     'browser_selective_repair.py',

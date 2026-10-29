@@ -44,6 +44,8 @@ def main():
         page.on('pageerror',lambda err:errors.append(str(err)))
         page.expose_function('QXTESTAPI',call_api)
         page.set_content(html,wait_until='domcontentloaded')
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('.sidebar [data-action="tender-nav"][data-view="registry"]').click()
         page.wait_for_selector('[data-tender-row]')
         page.locator('[data-action="tender-open"]').first.click()

@@ -48,6 +48,8 @@ if __name__=='__main__':
         page.locator('[data-action="new-discard"]').click()
         assert len(page.evaluate('state.reqs'))==1
         # Tender stage add and delete with confirm confirmation.
+        if page.locator('#tender-nav-toggle').get_attribute('aria-expanded') != 'true':
+            page.locator('#tender-nav-toggle').click()
         page.locator('[data-action="tender-nav"][data-view="registry"]').click()
         page.wait_for_selector('[data-action="tender-open"]')
         page.locator('[data-action="tender-open"]').first.click()
