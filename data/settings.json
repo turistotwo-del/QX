@@ -1,0 +1,21 @@
+{
+  "usd_buffer_rub": 5.0,
+  "offline_mode": false,
+  "usd_rate_cached": 86.8872,
+  "usd_rate_date_cached": "04.09.2026",
+  "default_markup": 0.2,
+  "default_delivery": 0.0,
+  "default_bg1": 0.0,
+  "default_bg2": 0.0,
+  "default_bg": 0.0,
+  "default_go": 0.0,
+  "default_sender": "ЗИОН",
+  "default_country": "Россия",
+  "default_trademark": "1093786",
+  "prefer_registry_device_when_not_required": "wifi",
+  "prefer_registry_device_when_both_required": "wifi",
+  "smart_registry_device": true,
+  "ui_theme": "dark",
+  "sidebar_width": 320,
+  "sidebar_collapsed": false
+}

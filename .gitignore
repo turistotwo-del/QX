@@ -1,0 +1,27 @@
+# Local Python and test outputs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+
+# Personal QX data and portable runtimes
+QX_UserData/
+.qx_runtime/
+*.qxproj
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+.env
+.env.*
+!.env.example
+
+# Generated Windows installer outputs
+windows_build/build/
+windows_build/dist/
+windows_build/out/
+build/
+dist/

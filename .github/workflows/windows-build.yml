@@ -1,0 +1,129 @@
+name: Build and verify QX Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  browser-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies and Chromium
+        run: |
+          python -m pip install -r requirements.txt -r modern/requirements.txt playwright
+          python -m playwright install --with-deps chromium
+          npm install --global typescript@5.9.3
+      - name: Compile frontend
+        run: tsc -p modern/tsconfig.json
+      - name: Run independent browser tests with timeouts
+        env:
+          QX_OFFLINE_MODE: '1'
+        run: |
+          # Launch each case under a fresh supervisor. This prevents Chromium
+          # handles from accumulating in a long-lived test harness process.
+          # GNU timeout enforces the bound even if Python hangs while spawning.
+          for scenario in \
+            browser_workspace_4039.py browser_selective_repair.py browser_smoke.py browser_ai_offline.py \
+            browser_gguf_status.py browser_eis_lookup.py browser_eis_document_url.py browser_eis_bulk.py browser_package_import.py \
+            browser_restore.py browser_diagnostics.py browser_legacy_import.py; do
+            timeout -k 5s 75s python tests/run_browser_suite.py --only "$scenario" --timeout 60
+          done
+
+  build:
+    needs: browser-acceptance
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Build Windows installer (runs automated tests)
+        shell: pwsh
+        env:
+          QX_BUNDLE_GGUF: '1'
+        run: ./windows_build/build_windows.ps1
+      - name: Install, selfcheck, upgrade, uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python windows_build/release_metadata.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Installer version metadata mismatch' }
+          $name = (python windows_build/release_metadata.py --print-installer | Select-Object -Last 1).Trim()
+          $setup = (Resolve-Path (Join-Path 'windows_build/out' $name)).Path
+          $target = Join-Path $env:TEMP 'QX Build Validation'
+          $localData = Join-Path $env:LOCALAPPDATA 'QXPodborshchik'
+          $env:QX_CI_UPGRADE_FIXTURE = '1'
+          New-Item -ItemType Directory -Force -Path $localData | Out-Null
+          . ./windows_build/invoke_checked_exe.ps1
+          $sentinel=Join-Path $localData 'ci-preserve-test.txt'
+          Set-Content -LiteralPath $sentinel -Value 'DO NOT DELETE USER DATA' -Encoding utf8
+          python windows_build/ci_upgrade_fixture.py seed
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot seed old-schema upgrade fixture' }
+          function Install-QX {
+            $args='/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="desktopicon" /DIR="'+$target+'"'
+            $p=Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Installation failed: $($p.ExitCode)" }
+          }
+          Install-QX
+          $app=Join-Path $target 'QXPodborshchik.exe'
+          if (-not (Test-Path $app)) { throw 'Installed EXE not found' }
+          Invoke-QXCheck -ExePath $app -Switch '--data-selfcheck'
+          Invoke-QXCheck -ExePath $app -Switch '--profile-selfcheck'
+          python windows_build/ci_upgrade_fixture.py verify
+          if ($LASTEXITCODE -ne 0) { throw 'Old user data was lost during schema migration' }
+          Invoke-QXCheck -ExePath $app -Switch '--selfcheck'
+          Invoke-QXCheck -ExePath $app -Switch '--api-selfcheck'
+          Invoke-QXCheck -ExePath $app -Switch '--ai-selfcheck'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'QX Подборщик.lnk'
+          if (-not (Test-Path $shortcut)) { throw 'Desktop shortcut was not created' }
+          # Check an in-place upgrade reuses the same installation directory.
+          Install-QX
+          if (-not (Test-Path $app)) { throw 'Upgrade removed the executable' }
+          Invoke-QXCheck -ExePath $app -Switch '--data-selfcheck'
+          Invoke-QXCheck -ExePath $app -Switch '--profile-selfcheck'
+          python windows_build/ci_upgrade_fixture.py verify
+          if ($LASTEXITCODE -ne 0) { throw 'Existing data changed during reinstall' }
+          if (-not (Test-Path $sentinel)) { throw 'Upgrade deleted user data' }
+          $uninstaller=Join-Path $target 'unins000.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Uninstaller missing' }
+          $p=Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Uninstall failed: $($p.ExitCode)" }
+          if (-not (Test-Path $sentinel)) { throw 'Uninstaller deleted user data' }
+          python windows_build/ci_upgrade_fixture.py verify
+          if ($LASTEXITCODE -ne 0) { throw 'Uninstaller deleted the migrated user database or migration snapshot' }
+          Write-Host 'Installation, reinstallation, shortcut and uninstall validated'
+      - name: Publish safety gate and checksum manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          # This step executes ONLY after every Windows install/update/uninstall
+          # assertion above succeeded. Failed EXEs must never be downloadable
+          # from the normal release artifact.
+          python windows_build/release_gate.py create --ci-accepted
+          if ($LASTEXITCODE -ne 0) { throw 'Release gate refused Windows installer' }
+          python windows_build/release_gate.py verify
+          if ($LASTEXITCODE -ne 0) { throw 'Release manifest verification failed' }
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: QX_Windows_VERIFIED_${{ github.run_number }}
+          path: |
+            windows_build/out/*.exe
+            windows_build/out/QX_build_manifest.json
+            windows_build/out/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30

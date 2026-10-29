@@ -1,0 +1,5 @@
+# QX Windows desktop (Edge WebView2 runtime).
+# proxy-tools 0.1.0 is a source-only pywebview dependency on PyPI.
+# QX installs setuptools + wheel into its embedded Python first and then uses
+# pip --no-build-isolation --prefer-binary for this requirements file.
+pywebview==6.2.1

@@ -1,0 +1,11 @@
+streamlit>=1.41,<2
+pandas>=2.0,<3
+requests>=2.31,<3
+beautifulsoup4>=4.12,<5
+pypdf>=5,<7
+python-docx>=1.1,<2
+openpyxl>=3.1,<4
+pywebview>=5.4,<7
+
+# Safe XML reading for downloaded EIS documents
+defusedxml>=0.7.1,<1

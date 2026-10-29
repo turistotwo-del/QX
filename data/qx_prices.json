@@ -1,0 +1,62 @@
+{
+  "barebone_24_fhd": {
+    "name": "Баребон QX 24\" 1K РАПТЕР",
+    "price": 13086.0
+  },
+  "barebone_27_2k": {
+    "name": "Баребон QX 27\" 2K РАПТЕР",
+    "price": 16106.0
+  },
+  "case_protected": {
+    "name": "Корпус QX защищённый",
+    "price": 1750.0
+  },
+  "case_standard": {
+    "name": "Корпус QX незащищённый",
+    "price": 1407.0
+  },
+  "motherboard_intel": {
+    "name": "Материнская плата QX Орбита B760m PRO",
+    "price": 11800.0
+  },
+  "motherboard_amd": {
+    "name": "Материнская плата QX A520M-W X8",
+    "price": 6151.0
+  },
+  "m2_key_e_adapter": {
+    "name": "Переходник QX для M.2 Key E / Wi‑Fi (AMD)",
+    "price": 0.0
+  },
+  "cardreader_registry": {
+    "name": "Картридер QX CRDQX0001RU (реестр)",
+    "price": 1500.0
+  },
+  "wifi_registry": {
+    "name": "Wi-Fi/Bluetooth QX WFQXSPD0001RU (реестр)",
+    "price": 914.64
+  },
+  "expansion_bar": {
+    "name": "Расширительная планка QX для АРМ",
+    "price": 1005.0
+  },
+  "hub_registry": {
+    "name": "USB-HUB QX USBQX0001RU (реестр)",
+    "price": 390.0
+  },
+  "keyboard_mouse": {
+    "name": "Клавиатура + мышь QX",
+    "price": 668.0
+  },
+  "keyboard": {
+    "name": "Клавиатура QX",
+    "price": 0.0
+  },
+  "mouse": {
+    "name": "Мышь QX",
+    "price": 0.0
+  },
+  "assembly": {
+    "name": "Сборка ПК",
+    "price": 750.0
+  }
+}
